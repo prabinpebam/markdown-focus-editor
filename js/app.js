@@ -266,7 +266,11 @@ function getSelectionState(el) {
 
   // Track previous focus-range to avoid redundant logs
 let prevFocusStart = -1;
-let prevFocusEnd   = -1;
+let prevFocusEnd = -1;
+
+// NEW: remember last logged caret coords
+let prevCaretX = null;
+let prevCaretY = null;
 
   function render() {
     const selectionDetails = getSelectionState(editor);
@@ -386,9 +390,9 @@ let prevFocusEnd   = -1;
 
       // Heading detection and styling (remains line-based)
       if (lineText.startsWith("# ")) { isHeading = true; currentLineFontSize = bodyFontSize * 3; }
-      else if (lineText.startsWith("## ")) { isHeading = true; currentLineFontSize = bodyFontSize * 2.5; }
-      else if (lineText.startsWith("### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 2; }
-      else if (lineText.startsWith("#### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1.5; }
+      else if (lineText.startsWith("## ")) { isHeading = true; currentLineFontSize = bodyFontSize * 2; }
+      else if (lineText.startsWith("### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1.6; }
+      else if (lineText.startsWith("#### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1.2; }
       else if (lineText.startsWith("##### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1; }
 
       div.style.fontSize = currentLineFontSize + 'px';
@@ -473,7 +477,27 @@ let prevFocusEnd   = -1;
       currentLineCharOffset += lineText.length + (i < originalLines.length - 1 ? 1 : 0);
     });
     setSelectionState(editor, selectionDetails);
-    
+
+    // NEW: log caret coords & apply auto-scroll
+    const caret = getCaretViewportCoords();
+    if (caret) {
+        // logging when changed
+        if (caret.x !== prevCaretX || caret.y !== prevCaretY) {
+            console.log(`Caret viewport coords: x=${caret.x}, y=${caret.y}`);
+            prevCaretX = caret.x;
+            prevCaretY = caret.y;
+        }
+
+        // auto-scroll if caret outside 25 %-75 % vertical band
+        const vh      = window.innerHeight;
+        const bandTop = vh * 0.25;
+        const bandBot = vh * 0.75;
+        if (caret.y < bandTop || caret.y > bandBot) {
+            const delta = caret.y - vh * 0.5;        // move caret to 50 % vh
+            window.scrollBy({ top: delta, behavior: 'smooth' });
+        }
+    }
+
     // Save to localStorage after rendering
     try {
       localStorage.setItem(localStorageKey, fullContent);
@@ -602,3 +626,44 @@ let prevFocusEnd   = -1;
   setSelectionState(editor, initialLoadData.selection); 
   updateThemeToggleButtonIcon(); // Set initial theme icon
   updateActiveModeButton(); // Set initial active mode button after settings are loaded and DOM might be ready
+
+/**
+ * Returns the caret’s viewport coordinates ({ x, y }) or null if none.
+ * Viewport == coordinates relative to window, so (0,0) is top-left of the visible page.
+ */
+function getCaretViewportCoords() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return null;
+
+  const range = sel.getRangeAt(0).cloneRange();
+  range.collapse(true);                     // we only need the caret
+
+  // Try the fast path first
+  let rect = range.getClientRects()[0] || range.getBoundingClientRect();
+  if (rect && rect.width + rect.height) {
+    return { x: rect.left, y: rect.top };
+  }
+
+  // Fallback – inject a zero-width span to obtain a rect
+  const span = document.createElement('span');
+  span.appendChild(document.createTextNode('\u200B'));
+  range.insertNode(span);
+  rect = span.getBoundingClientRect();
+  span.parentNode.removeChild(span);
+
+  // Restore original selection just in case
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  return rect ? { x: rect.left, y: rect.top } : null;
+}
+
+/* ---------- viewport-centred-caret helpers ---------- */
+function updateEditorPadding() {
+  const pad = (window.innerHeight / 2) + 'px';   // 50 vh
+  editor.style.paddingTop    = pad;
+  editor.style.paddingBottom = pad;
+}
+window.addEventListener('resize', updateEditorPadding);
+updateEditorPadding();           // initial call
+/* ---------------------------------------------------- */
