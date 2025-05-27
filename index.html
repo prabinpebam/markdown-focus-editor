@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Markdown Editor</title>
+  <!-- Google Font Default -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style/main.css">
+</head>
+<body>
+  <button id="hamburger">☰</button>
+  <div id="toolbar">
+    <button id="save" title="Save (Ctrl+S)"><img src="images/save.svg" alt="Save"></button>
+    <button id="open-file" title="Open"><img src="images/open.svg" alt="Open"></button>
+    <button id="increase-font" title="Increase Font Size"><img src="images/increase-font.svg" alt="Increase Font"></button>
+    <button id="decrease-font" title="Decrease Font Size"><img src="images/decrease-font.svg" alt="Decrease Font"></button>
+    <button id="toggle-theme" title="Toggle Light/Dark Theme"><img src="images/dark-theme.svg" alt="Toggle Theme"></button>
+    <button id="fullscreen" title="Toggle Fullscreen"><img src="images/fullscreen.svg" alt="Fullscreen"></button>
+    <button data-mode="sentence" class="mode-btn" title="Sentence Focus Mode"><img src="images/line-focus.svg" alt="Sentence Focus"></button>
+    <button data-mode="paragraph" class="mode-btn" title="Paragraph Focus Mode"><img src="images/paragraph-focus.svg" alt="Paragraph Focus"></button>
+    <button data-mode="full" class="mode-btn" title="Full View Mode"><img src="images/full-view.svg" alt="Full View"></button>
+    <button id="font-picker" title="Change Font"><img src="images/font-picker.svg" alt="Change Font"></button>
+    <input type="file" id="file-input" accept=".txt,.md" style="display:none;">
+  </div>
+
+  <div id="editor" contenteditable="true" spellcheck="false"></div>
+
+  <div id="font-modal">
+    <div class="content">
+      <h3>Select Font</h3>
+      <div id="font-list"></div>
+      <button id="close-font-modal">Close</button>
+    </div>
+  </div>
+
+  <script src="js/app.js" defer></script>
+</body>
+</html>
