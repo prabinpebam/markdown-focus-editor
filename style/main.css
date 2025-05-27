@@ -118,3 +118,75 @@ body {
   width: 300px;
 }
 #font-list button { display: block; margin: 0.25rem 0; width: 100%; text-align: left; }
+/* --- toolbar separator --- */
+#toolbar .separator{
+  width:1px;height:24px;background:var(--dim);opacity:.4;margin:0 4px;
+}
+
+/* --- iOS-like slide switch --- */
+.switch{position:relative;display:inline-block;width:42px;height:24px;}
+.switch input{display:none;}
+.slider{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  background:#aaa;border-radius:12px;cursor:pointer;transition:.2s;
+}
+.slider:before{
+  content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;
+  background:#fff;border-radius:50%;transition:.2s;
+}
+.switch input:checked + .slider{background:#2196f3;}
+.switch input:checked + .slider:before{transform:translateX(18px);}
+.switch .slider{box-shadow:inset 0 0 2px rgba(0,0,0,.3);}
+
+
+
+.separator {
+      display: inline-block;
+      width: 1px;
+      height: 24px;
+      background-color: #ccc;
+      margin: 0 8px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+    }
+
+    input:checked + .slider {
+      background-color: #007bff;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(14px);
+    }

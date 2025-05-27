@@ -144,7 +144,7 @@ function getSelectionState(el) {
     }
   }
 
-  let mode = 'sentence'; // Default focus mode
+  let focusEnabled = true;             // new single flag
   let fontSize = 16;
   const apiKey = '<YOUR_GOOGLE_FONTS_API_KEY>';
   const localStorageKey = 'markdownEditorContent';
@@ -154,13 +154,13 @@ function getSelectionState(el) {
   const localStorageSelectionEndOffsetKey = 'markdownEditorSelEndOffset';
   const localStorageSelectionIsCollapsedKey = 'markdownEditorSelIsCollapsed';
   const localStorageThemeKey = 'markdownEditorTheme';
-  const localStorageFocusModeKey = 'markdownEditorFocusMode';
+  const localStorageFocusEnabledKey = 'markdownEditorFocusEnabled'; // new
   const localStorageFontSizeKey = 'markdownEditorFontSize';
 
-  const editor = document.getElementById('editor');
+  const editor            = document.getElementById('editor');
   const themeToggleButton = document.getElementById('toggle-theme');
-  const themeToggleIcon = themeToggleButton.querySelector('img');
-  const modeButtons = document.querySelectorAll('.mode-btn');
+  const themeToggleIcon   = themeToggleButton.querySelector('img');
+  const focusToggle        = document.getElementById('focus-toggle'); // may be null
   const toolbar = document.getElementById('toolbar');
   const hamburgerButton = document.getElementById('hamburger');
 
@@ -176,13 +176,13 @@ function getSelectionState(el) {
     }
   }
 
-  function updateActiveModeButton() {
-    modeButtons.forEach(btn => {
-      btn.classList.remove('active-mode-btn');
-      if (btn.dataset.mode === mode) {
-        btn.classList.add('active-mode-btn');
-      }
-    });
+  /* safely attach the handler only if the toggle exists */
+  if (focusToggle) {
+    focusToggle.onchange = () => {
+      focusEnabled = focusToggle.checked;
+      localStorage.setItem(localStorageFocusEnabledKey, focusEnabled ? '1' : '0');
+      render();
+    };
   }
 
   // Hide toolbar when clicking outside of it
@@ -209,16 +209,28 @@ function getSelectionState(el) {
   editor.addEventListener('dragover', e => e.preventDefault());
   editor.addEventListener('drop', handleDrop);
   
-  document.getElementById('increase-font').onclick = () => { 
-    fontSize += 2; 
-    localStorage.setItem(localStorageFontSizeKey, fontSize);
-    render(); 
-  };
-  document.getElementById('decrease-font').onclick = () => { 
-    fontSize = Math.max(8, fontSize - 2); 
-    localStorage.setItem(localStorageFontSizeKey, fontSize);
-    render(); 
-  };
+  /* -------- font-size helpers ----------------------------------- */
+function persistFontSize() {
+  try { localStorage.setItem(localStorageFontSizeKey, String(fontSize)); } catch {}
+}
+function loadFontSize() {
+  const saved = localStorage.getItem(localStorageFontSizeKey);
+  fontSize = saved ? (parseInt(saved, 10) || 16) : 16;
+}
+loadFontSize();   // initialise as early as possible
+/* -------------------------------------------------------------- */
+
+// adjust both buttons to use the helper
+document.getElementById('increase-font').onclick = () => {
+  fontSize += 2;
+  persistFontSize();
+  render();
+};
+document.getElementById('decrease-font').onclick = () => {
+  fontSize = Math.max(8, fontSize - 2);
+  persistFontSize();
+  render();
+};
 
   themeToggleButton.onclick = () => {
     const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -232,12 +244,6 @@ function getSelectionState(el) {
     updateThemeToggleButtonIcon();
   };
   document.getElementById('fullscreen').onclick = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
-  document.querySelectorAll('.mode-btn').forEach(btn => btn.onclick = () => { 
-    mode = btn.dataset.mode; 
-    localStorage.setItem(localStorageFocusModeKey, mode);
-    updateActiveModeButton(); // Update active class
-    render(); 
-  });
   document.getElementById('font-picker').onclick = () => { document.getElementById('font-modal').style.display='flex'; loadFonts(); };
   document.getElementById('close-font-modal').onclick = () => document.getElementById('font-modal').style.display='none';
 
@@ -272,6 +278,7 @@ let prevFocusEnd = -1;
 let prevCaretX = null;
 let prevCaretY = null;
 
+  /* ------------------ render ---------------------------------------------- */
   function render() {
     const selectionDetails = getSelectionState(editor);
     const fullContent = editor.innerText; 
@@ -280,16 +287,13 @@ let prevCaretY = null;
     
     const focusLineIndexFromSelection = selectionDetails.endLineIndex; 
     
-    let activeParaStart = -1; // Explicitly initialize for paragraph mode
-    let activeParaEnd = -1;   // Explicitly initialize for paragraph mode
+
     const baseLineHeight = 1.4; 
     const bodyFontSize = fontSize;
 
     // --- Sentence Focus Mode: Pre-calculation ---
-    let focusStartIndex = 0;
-    let focusEndIndex = fullContent.length > 0 ? fullContent.length - 1 : 0;
-
-    if (mode === 'sentence' && fullContent.trim().length > 0) {
+    let focusStartIndex = 0, focusEndIndex = -1;
+    if (focusEnabled && fullContent.trim()) {
       // 1. Calculate absolute cursor character offset
       let absoluteCursorOffset = 0;
       for (let i = 0; i < selectionDetails.endLineIndex; i++) {
@@ -340,46 +344,18 @@ let prevCaretY = null;
         }
       }
       // If fewer than 2 terminators found, focusEndIndex remains fullContent.length - 1 (end of document)
-    } else if (mode === 'sentence' && fullContent.trim().length === 0) {
-      focusStartIndex = 0;
-      focusEndIndex   = 0;
+    } else if (focusEnabled && fullContent.trim().length === 0) {
+      focusStartIndex = focusEndIndex = 0;
     }
     // --- End Sentence Focus Mode Pre-calculation ---
 
-    // LOG the indices whenever they change
-    if (mode === 'sentence' && (focusStartIndex !== prevFocusStart || focusEndIndex !== prevFocusEnd)) {
+    // log only when focus is on
+    if (focusEnabled && (focusStartIndex !== prevFocusStart || focusEndIndex !== prevFocusEnd)) {
       console.log(`Sentence focus range updated: start=${focusStartIndex}, end=${focusEndIndex}`);
       prevFocusStart = focusStartIndex;
       prevFocusEnd   = focusEndIndex;
     }
 
-    if (mode === 'paragraph') {
-      // This logic identifies the paragraph containing the cursor.
-      // A paragraph is a sequence of non-blank lines.
-      // If the cursor is on a blank line, no paragraph is focused.
-      if (originalLines.length > 0 && 
-          focusLineIndexFromSelection >= 0 && 
-          focusLineIndexFromSelection < originalLines.length && 
-          originalLines[focusLineIndexFromSelection].trim() !== '') {
-        
-        // Start with the cursor's line as part of the current paragraph
-        activeParaStart = focusLineIndexFromSelection;
-        // Expand upwards: move to previous lines as long as they are not blank
-        while (activeParaStart > 0 && originalLines[activeParaStart - 1].trim() !== '') {
-          activeParaStart--;
-        }
-        
-        // Start with the cursor's line as part of the current paragraph
-        activeParaEnd = focusLineIndexFromSelection;
-        // Expand downwards: move to next lines as long as they are not blank
-        while (activeParaEnd < originalLines.length - 1 && originalLines[activeParaEnd + 1].trim() !== '') {
-          activeParaEnd++;
-        }
-      } 
-      // If the initial check fails (e.g., cursor on a blank line, or editor is empty),
-      // activeParaStart and activeParaEnd remain -1, resulting in no paragraph being focused.
-    }
-    
     let currentLineCharOffset = 0;
     originalLines.forEach((lineText, i) => {
       const div = document.createElement('div');
@@ -442,28 +418,22 @@ let prevCaretY = null;
         const titleSpan = document.createElement('span');
         titleSpan.textContent = title;
 
-        /* -------- focus-colour decision -------- */
+        /* -------- focus-colour decision for headings -------- */
         let clr = 'var(--fg)';
 
-        if (mode === 'sentence') {
-          const ls  = currentLineCharOffset;
-          const le  = ls + lineText.length - 1;
-          const ovS = Math.max(ls, focusStartIndex);
-          const ovE = Math.min(le, focusEndIndex);
-          clr = (ovS > ovE) ? 'var(--dim)' : 'var(--fg)';
-        } else if (mode === 'paragraph') {
-          const inPara = activeParaStart !== -1 && i >= activeParaStart && i <= activeParaEnd;
-          clr = inPara ? 'var(--fg)' : 'var(--dim)';
-        } // mode === 'full' keeps fg
-
-        marker.style.color = clr;
-        titleSpan.style.color = clr;
-        /* --------------------------------------- */
+        if (focusEnabled) {
+          const ls = currentLineCharOffset;
+          const le = ls + lineText.length - 1;
+          clr      = (le < focusStartIndex || ls > focusEndIndex) ? 'var(--dim)' : 'var(--fg)';
+        }
+        marker.style.color     = clr;
+        titleSpan.style.color  = clr;
+        /* ----------------------------------------------------- */
 
         div.append(marker, titleSpan);
-      } else if (mode !== 'sentence') {
-        /* keep old behaviour for paragraph / full */
+      } else if (!focusEnabled) {
         div.textContent = lineText || '\u200B';
+        div.style.color = 'var(--fg)';
       } else {
         /* sentence-focus : split the line into spans if needed            *
          * line range  : [lineStart , lineEndInclusive]                    *
@@ -508,14 +478,6 @@ let prevCaretY = null;
             div.append(s);
           }
         }
-      }
-
-      /* colour handling for paragraph/full that was removed above */
-      if (mode === 'paragraph') {
-        const inPara = activeParaStart !== -1 && i >= activeParaStart && i <= activeParaEnd;
-        div.style.color = inPara ? 'var(--fg)' : 'var(--dim)';
-      } else if (mode === 'full') {
-        div.style.color = 'var(--fg)';
       }
 
       editor.append(div);
@@ -625,16 +587,9 @@ let prevCaretY = null;
       document.documentElement.removeAttribute('data-theme'); // Default to light
     }
 
-    const savedMode = localStorage.getItem(localStorageFocusModeKey);
-    if (savedMode) {
-      mode = savedMode;
-    } // Else, `mode` keeps its default 'sentence'
-    // updateActiveModeButton(); // Moved to after initial render
-
-    const savedFontSize = localStorage.getItem(localStorageFontSizeKey);
-    if (savedFontSize) {
-      fontSize = parseInt(savedFontSize, 10) || 16;
-    } // Else, `fontSize` keeps its default 16
+    const savedFocus = localStorage.getItem(localStorageFocusEnabledKey);
+    if (savedFocus !== null) focusEnabled = savedFocus === '1';
+    if (focusToggle) focusToggle.checked = focusEnabled; // reflect
   }
 
   // Load content from localStorage on startup
@@ -671,7 +626,8 @@ let prevCaretY = null;
   // The render() call itself will try to restore selection, but this ensures the loaded one is prioritized for the very first load.
   setSelectionState(editor, initialLoadData.selection); 
   updateThemeToggleButtonIcon(); // Set initial theme icon
-  updateActiveModeButton(); // Set initial active mode button after settings are loaded and DOM might be ready
+  /* ensure the toggle exists before touching it */
+  if (focusToggle) focusToggle.checked = focusEnabled; // reflect saved state
 
 /**
  * Returns the caret’s viewport coordinates ({ x, y }) or null if none.
