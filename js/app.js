@@ -385,7 +385,14 @@ let prevCaretY = null;
       const div = document.createElement('div');
       let currentLineFontSize = bodyFontSize;
       let isHeading = false;
-      
+
+      // --- heading detection ---
+      let headingMatch = lineText.match(/^(#+)\s+(.*)$/); // 1: hashes, 2: title
+      if (headingMatch) {
+        isHeading = true;
+        lineText  = headingMatch[0];          // keep original text (hashes + space + title)
+      }
+
       div.style.marginTop = '0px';
 
       // Heading detection and styling (remains line-based)
@@ -401,7 +408,7 @@ let prevCaretY = null;
       if (isHeading) {
           div.style.fontWeight = 'bold';
           div.style.marginTop = (1.3 * currentLineFontSize) + 'px';
-      } else {
+        } else {
           const isNonBlankCurrentLine = lineText.trim() !== '';
           const isPreviousLineBlank = i > 0 && originalLines[i - 1].trim() === '';
           if (isNonBlankCurrentLine) {
@@ -409,13 +416,52 @@ let prevCaretY = null;
                   div.style.marginTop = (0.6 * baseLineHeight) + 'em';
               }
           }
-      }
-      if (i === 0) {
+        }
+        if (i === 0) {
           div.style.marginTop = '0px';
-      }
+        }
 
       /* ---- build line DOM ---- */
-      if (mode !== 'sentence') {
+      if (isHeading) {
+        /* overhanging “# …” marker */
+        const hashes = headingMatch[1];          // e.g. "###"
+        const title  = headingMatch[2] || '\u200B';
+        const gutter = (hashes.length + 1) + 'ch';
+
+        div.style.position = 'relative';
+        div.style.display  = 'block';
+
+        const marker = document.createElement('span');
+        marker.className      = 'hash-marker';
+        marker.textContent    = hashes + ' ';
+        marker.style.cssText += `
+          display:inline-block;width:${gutter};
+          margin-left:-${gutter};text-align:right;
+          pointer-events:none;`;
+
+        const titleSpan = document.createElement('span');
+        titleSpan.textContent = title;
+
+        /* -------- focus-colour decision -------- */
+        let clr = 'var(--fg)';
+
+        if (mode === 'sentence') {
+          const ls  = currentLineCharOffset;
+          const le  = ls + lineText.length - 1;
+          const ovS = Math.max(ls, focusStartIndex);
+          const ovE = Math.min(le, focusEndIndex);
+          clr = (ovS > ovE) ? 'var(--dim)' : 'var(--fg)';
+        } else if (mode === 'paragraph') {
+          const inPara = activeParaStart !== -1 && i >= activeParaStart && i <= activeParaEnd;
+          clr = inPara ? 'var(--fg)' : 'var(--dim)';
+        } // mode === 'full' keeps fg
+
+        marker.style.color = clr;
+        titleSpan.style.color = clr;
+        /* --------------------------------------- */
+
+        div.append(marker, titleSpan);
+      } else if (mode !== 'sentence') {
         /* keep old behaviour for paragraph / full */
         div.textContent = lineText || '\u200B';
       } else {
