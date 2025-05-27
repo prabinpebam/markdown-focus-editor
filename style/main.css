@@ -1,115 +1,120 @@
 :root {
-    --bg: #f0f0f0;
-    --fg: rgba(0,0,0,1);
-    --dim: rgba(0,0,0,0.3);
-    --toolbar-bg-actual: #fff; /* Base color for toolbar */
-    --toolbar-bg-transparent: rgba(255,255,255,0.6); /* 60% opacity */
-    --toolbar-button-hover-bg: rgba(0,0,0,0.05);
-    --modal-bg: rgba(0,0,0,0.5);
-  }
-  [data-theme="dark"] {
-    --bg: #1e1e1e;
-    --fg: rgba(255,255,255,1);
-    --dim: rgba(255,255,255,0.3);
-    --toolbar-bg-actual: #333; /* Base color for toolbar */
-    --toolbar-bg-transparent: rgba(51,51,51,0.6); /* 60% opacity */
-    --toolbar-button-hover-bg: rgba(255,255,255,0.1);
-    --modal-bg: rgba(0,0,0,0.8);
-  }
-  body {
-    margin: 0;
-    font-family: 'Roboto Mono', monospace;
-    background: var(--bg);
-    color: var(--fg);
-    height: 100vh;
-  }
-  #toolbar {
-    position: fixed;
-    top: 20px; /* Distance from top */
-    left: 50%;
-    transform: translateX(-50%); /* Horizontally center */
-    padding: 8px;
-    background: var(--toolbar-bg-transparent);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px); /* For Safari */
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-    display: none; /* Initially hidden */
-    flex-direction: row; /* Horizontal layout for buttons */
-    align-items: center;
-    gap: 8px; /* Spacing between icon buttons */
-    z-index: 1000;
-  }
-  #toolbar.open {
-    display: flex; /* Show when open */
-  }
-  #toolbar button {
-    background: transparent;
-    border: none;
-    color: var(--fg); /* For accessibility, alt text, etc. */
-    padding: 6px; /* Clickable area around icon */
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px; /* Rounded corners for button hover effect */
-    transition: background-color 0.2s ease;
-  }
-  #toolbar button:hover {
-    background: var(--toolbar-button-hover-bg);
-  }
-  #toolbar button img {
-    width: 22px; /* Icon size */
-    height: 22px;
-    display: block; /* Prevents extra space if button display was inline-flex */
-    /* Default filter for light mode: black icon with 80% opacity */
-    filter: brightness(0) opacity(0.8);
-    transition: filter 0.3s ease; /* Smooth transition for theme changes */
-  }
-  [data-theme="dark"] #toolbar button img {
-    /* Filter for dark mode: white icon with 80% opacity */
-    filter: brightness(0) invert(1) opacity(0.8);
-  }
-  #hamburger {
-    position: fixed;
-    top: 1rem;
-    left: 1rem;
-    z-index: 1100;
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: var(--fg);
-  }
-  #editor {
-    max-width: 1000px;
-    margin: 2rem auto; /* This contributes 2rem top + 2rem bottom margin */
-    padding: 3rem 2rem 2rem 2rem;
-    box-sizing: border-box;
-    min-height: calc(100vh - 4rem); /* Changed from height to min-height */
-    white-space: pre-wrap;
-    outline: none;
-    font-size: 16px;
-    transition: background 0.3s, color 0.3s;
-  }
-  .dimmed { color: var(--dim); }
-  .focus-line {}, .focus-paragraph {}
-  /* Modal */
-  #font-modal {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: var(--modal-bg);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000;
-  }
-  #font-modal .content {
-    background: var(--toolbar-bg-actual);
-    padding: 1rem;
-    max-height: 70%;
-    overflow-y: auto;
-    width: 300px;
-  }
-  #font-list button { display: block; margin: 0.25rem 0; width: 100%; text-align: left; }
+  --bg: #f0f0f0;
+  --fg: rgba(0,0,0,1);
+  --dim: rgba(0,0,0,0.3);
+  --toolbar-bg-actual: #fff; /* Base color for toolbar */
+  --toolbar-bg-transparent: rgba(255,255,255,0.6); /* 60% opacity */
+  --toolbar-button-hover-bg: rgba(0,0,0,0.05);
+  --toolbar-button-active-bg: #e0e0ff; /* Light blue for active button */
+  --modal-bg: rgba(0,0,0,0.5);
+}
+[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --fg: rgba(255,255,255,1);
+  --dim: rgba(255,255,255,0.3);
+  --toolbar-bg-actual: #333; /* Base color for toolbar */
+  --toolbar-bg-transparent: rgba(51,51,51,0.6); /* 60% opacity */
+  --toolbar-button-hover-bg: rgba(255,255,255,0.1);
+  --toolbar-button-active-bg: #303050; /* Darker blue for active button in dark mode */
+  --modal-bg: rgba(0,0,0,0.8);
+}
+body {
+  margin: 0;
+  font-family: 'Roboto Mono', monospace;
+  background: var(--bg);
+  color: var(--fg);
+  height: 100vh;
+}
+#toolbar {
+  position: fixed;
+  top: 20px; /* Distance from top */
+  left: 50%;
+  transform: translateX(-50%); /* Horizontally center */
+  padding: 8px;
+  background: var(--toolbar-bg-transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px); /* For Safari */
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  display: none; /* Initially hidden */
+  flex-direction: row; /* Horizontal layout for buttons */
+  align-items: center;
+  gap: 8px; /* Spacing between icon buttons */
+  z-index: 1000;
+}
+#toolbar.open {
+  display: flex; /* Show when open */
+}
+#toolbar button {
+  background: transparent;
+  border: none;
+  color: var(--fg); /* For accessibility, alt text, etc. */
+  padding: 6px; /* Clickable area around icon */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px; /* Rounded corners for button hover effect */
+  transition: background-color 0.2s ease;
+}
+#toolbar button:hover {
+  background: var(--toolbar-button-hover-bg);
+}
+#toolbar button.active-mode-btn {
+  background-color: var(--toolbar-button-active-bg);
+}
+#toolbar button img {
+  width: 22px; /* Icon size */
+  height: 22px;
+  display: block; /* Prevents extra space if button display was inline-flex */
+  /* Default filter for light mode: black icon with 80% opacity */
+  filter: brightness(0) opacity(0.8);
+  transition: filter 0.3s ease; /* Smooth transition for theme changes */
+}
+[data-theme="dark"] #toolbar button img {
+  /* Filter for dark mode: white icon with 80% opacity */
+  filter: brightness(0) invert(1) opacity(0.8);
+}
+#hamburger {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1100;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--fg);
+}
+#editor {
+  max-width: 1000px;
+  margin: 2rem auto; /* This contributes 2rem top + 2rem bottom margin */
+  padding: 3rem 2rem 2rem 2rem;
+  box-sizing: border-box;
+  min-height: calc(100vh - 4rem); /* Changed from height to min-height */
+  white-space: pre-wrap;
+  outline: none;
+  font-size: 16px;
+  transition: background 0.3s, color 0.3s;
+}
+.dimmed { color: var(--dim); }
+.focus-line {}, .focus-paragraph {}
+/* Modal */
+#font-modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: var(--modal-bg);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+#font-modal .content {
+  background: var(--toolbar-bg-actual);
+  padding: 1rem;
+  max-height: 70%;
+  overflow-y: auto;
+  width: 300px;
+}
+#font-list button { display: block; margin: 0.25rem 0; width: 100%; text-align: left; }

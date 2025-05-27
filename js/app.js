@@ -160,6 +160,9 @@ function getSelectionState(el) {
   const editor = document.getElementById('editor');
   const themeToggleButton = document.getElementById('toggle-theme');
   const themeToggleIcon = themeToggleButton.querySelector('img');
+  const modeButtons = document.querySelectorAll('.mode-btn');
+  const toolbar = document.getElementById('toolbar');
+  const hamburgerButton = document.getElementById('hamburger');
 
   function updateThemeToggleButtonIcon() {
     if (document.documentElement.hasAttribute('data-theme') && document.documentElement.getAttribute('data-theme') === 'dark') {
@@ -173,7 +176,32 @@ function getSelectionState(el) {
     }
   }
 
-  document.getElementById('hamburger').onclick = () => document.getElementById('toolbar').classList.toggle('open');
+  function updateActiveModeButton() {
+    modeButtons.forEach(btn => {
+      btn.classList.remove('active-mode-btn');
+      if (btn.dataset.mode === mode) {
+        btn.classList.add('active-mode-btn');
+      }
+    });
+  }
+
+  // Hide toolbar when clicking outside of it
+  document.addEventListener('click', function(e) {
+    // Check if toolbar is open and the click is not on toolbar or hamburger button
+    if (toolbar.classList.contains('open') && 
+        !toolbar.contains(e.target) && 
+        e.target !== hamburgerButton) {
+      // Close the toolbar
+      toolbar.classList.remove('open');
+    }
+  });
+
+  hamburgerButton.onclick = (e) => {
+    // Prevent the document click handler from immediately closing the toolbar
+    e.stopPropagation();
+    toolbar.classList.toggle('open');
+  };
+  
   document.getElementById('save').onclick = saveFile;
   document.addEventListener('keydown', e => { if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveFile(); }});
   document.getElementById('open-file').onclick = () => document.getElementById('file-input').click();
@@ -207,6 +235,7 @@ function getSelectionState(el) {
   document.querySelectorAll('.mode-btn').forEach(btn => btn.onclick = () => { 
     mode = btn.dataset.mode; 
     localStorage.setItem(localStorageFocusModeKey, mode);
+    updateActiveModeButton(); // Update active class
     render(); 
   });
   document.getElementById('font-picker').onclick = () => { document.getElementById('font-modal').style.display='flex'; loadFonts(); };
@@ -235,6 +264,10 @@ function getSelectionState(el) {
     reader.readAsText(file);
   }
 
+  // Track previous focus-range to avoid redundant logs
+let prevFocusStart = -1;
+let prevFocusEnd   = -1;
+
   function render() {
     const selectionDetails = getSelectionState(editor);
     const fullContent = editor.innerText; 
@@ -243,101 +276,104 @@ function getSelectionState(el) {
     
     const focusLineIndexFromSelection = selectionDetails.endLineIndex; 
     
-    let activeParaStart = -1;
-    let activeParaEnd = -1;
+    let activeParaStart = -1; // Explicitly initialize for paragraph mode
+    let activeParaEnd = -1;   // Explicitly initialize for paragraph mode
     const baseLineHeight = 1.4; 
     const bodyFontSize = fontSize;
 
     // --- Sentence Focus Mode: Pre-calculation ---
-    let sentences = []; // Ensure sentences is declared here to be accessible later
-    let focusedSentenceIndices = new Set();
-    if (mode === 'sentence') {
+    let focusStartIndex = 0;
+    let focusEndIndex = fullContent.length > 0 ? fullContent.length - 1 : 0;
+
+    if (mode === 'sentence' && fullContent.trim().length > 0) {
       // 1. Calculate absolute cursor character offset
       let absoluteCursorOffset = 0;
       for (let i = 0; i < selectionDetails.endLineIndex; i++) {
         absoluteCursorOffset += (originalLines[i] || "").length + 1; // +1 for newline
       }
       absoluteCursorOffset += selectionDetails.endOffsetInLine;
-      // Ensure cursor offset is within bounds of fullContent
       absoluteCursorOffset = Math.max(0, Math.min(absoluteCursorOffset, fullContent.length));
 
-
-      // 2. Parse fullContent into sentences: { text, start, end }
-      if (fullContent.trim().length > 0) {
-        let sentenceStartCharIndex = 0;
-        for (let i = 0; i < fullContent.length; i++) {
-          if (fullContent[i] === '.') {
-            if (i === fullContent.length - 1 || /\s/.test(fullContent[i + 1])) {
-              sentences.push({
-                text: fullContent.substring(sentenceStartCharIndex, i + 1),
-                start: sentenceStartCharIndex,
-                end: i
-              });
-              sentenceStartCharIndex = i + 1;
-              // Skip whitespace following the period for the start of the next sentence
-              while (sentenceStartCharIndex < fullContent.length && /\s/.test(fullContent[sentenceStartCharIndex])) {
-                sentenceStartCharIndex++;
-              }
+      // 2. Determine focusStartIndex
+      // Check characters before cursor in descending order
+      let terminatorsFoundBackwards = 0;
+      
+      for (let i = absoluteCursorOffset - 1; i >= 0; i--) {
+        const char = fullContent[i];
+        // Check if character is a sentence terminator
+        if (char === '.' || char === '!' || char === '?' || char === '…') {
+          terminatorsFoundBackwards++;
+          
+          // When we find the second terminator, set start position to caret position after this character
+          if (terminatorsFoundBackwards === 2) {
+            focusStartIndex = i + 1; // Position right after terminator
+            
+            // Skip any whitespace after the terminator
+            while (focusStartIndex < fullContent.length && /\s/.test(fullContent[focusStartIndex])) {
+              focusStartIndex++;
             }
+            break;
           }
         }
-        // Add the last part if it doesn't end with a period or if content remains
-        if (sentenceStartCharIndex < fullContent.length) {
-          sentences.push({
-            text: fullContent.substring(sentenceStartCharIndex),
-            start: sentenceStartCharIndex,
-            end: fullContent.length - 1
-          });
-        }
       }
+      // If fewer than 2 terminators found, focusStartIndex remains 0 (beginning of document)
+
+      // 3. Determine focusEndIndex
+      // Check characters after cursor in ascending order
+      let terminatorsFoundForwards = 0;
       
-      if (sentences.length === 0 && fullContent.trim().length > 0) { // Handle text with no periods
-          sentences.push({ text: fullContent, start: 0, end: fullContent.length - 1});
-      }
-
-      // 3. Identify current sentence index
-      let currentSentenceIndex = -1;
-      for (let i = 0; i < sentences.length; i++) {
-        // A cursor is in a sentence if its offset is between sentence start and end (inclusive of end).
-        // Or, if at the start of the sentence.
-        if (absoluteCursorOffset >= sentences[i].start && absoluteCursorOffset <= sentences[i].end + 1) {
-           // The +1 for sentences[i].end allows cursor to be right after the period.
-          currentSentenceIndex = i;
-          break;
+      for (let i = absoluteCursorOffset; i < fullContent.length; i++) {
+        const char = fullContent[i];
+        // Check if character is a sentence terminator
+        if (char === '.' || char === '!' || char === '?' || char === '…') {
+          terminatorsFoundForwards++;
+          
+          // When we find the second terminator, set end position to this character's position
+          if (terminatorsFoundForwards === 2) {
+            focusEndIndex = i - 1; // position *before* the 2nd terminator
+            break;
+          }
         }
       }
-       if (currentSentenceIndex === -1 && sentences.length > 0) { // Default to first or last if cursor is outside
-          if (absoluteCursorOffset <= sentences[0].start) currentSentenceIndex = 0;
-          else currentSentenceIndex = sentences.length - 1;
-      }
-
-
-      // 4. Determine focused sentence indices (current, previous, next)
-      if (currentSentenceIndex !== -1) {
-        focusedSentenceIndices.add(currentSentenceIndex);
-        if (currentSentenceIndex > 0) {
-          focusedSentenceIndices.add(currentSentenceIndex - 1);
-        }
-        if (currentSentenceIndex < sentences.length - 1) {
-          focusedSentenceIndices.add(currentSentenceIndex + 1);
-        }
-      }
-      // Ensure `sentences` is populated for the loop below if mode is 'sentence'
+      // If fewer than 2 terminators found, focusEndIndex remains fullContent.length - 1 (end of document)
+    } else if (mode === 'sentence' && fullContent.trim().length === 0) {
+      focusStartIndex = 0;
+      focusEndIndex   = 0;
     }
     // --- End Sentence Focus Mode Pre-calculation ---
 
+    // LOG the indices whenever they change
+    if (mode === 'sentence' && (focusStartIndex !== prevFocusStart || focusEndIndex !== prevFocusEnd)) {
+      console.log(`Sentence focus range updated: start=${focusStartIndex}, end=${focusEndIndex}`);
+      prevFocusStart = focusStartIndex;
+      prevFocusEnd   = focusEndIndex;
+    }
 
     if (mode === 'paragraph') {
-      if (originalLines.length > 0 && focusLineIndexFromSelection >= 0 && focusLineIndexFromSelection < originalLines.length && originalLines[focusLineIndexFromSelection].trim() !== '') {
+      // This logic identifies the paragraph containing the cursor.
+      // A paragraph is a sequence of non-blank lines.
+      // If the cursor is on a blank line, no paragraph is focused.
+      if (originalLines.length > 0 && 
+          focusLineIndexFromSelection >= 0 && 
+          focusLineIndexFromSelection < originalLines.length && 
+          originalLines[focusLineIndexFromSelection].trim() !== '') {
+        
+        // Start with the cursor's line as part of the current paragraph
         activeParaStart = focusLineIndexFromSelection;
+        // Expand upwards: move to previous lines as long as they are not blank
         while (activeParaStart > 0 && originalLines[activeParaStart - 1].trim() !== '') {
           activeParaStart--;
         }
+        
+        // Start with the cursor's line as part of the current paragraph
         activeParaEnd = focusLineIndexFromSelection;
+        // Expand downwards: move to next lines as long as they are not blank
         while (activeParaEnd < originalLines.length - 1 && originalLines[activeParaEnd + 1].trim() !== '') {
           activeParaEnd++;
         }
-      }
+      } 
+      // If the initial check fails (e.g., cursor on a blank line, or editor is empty),
+      // activeParaStart and activeParaEnd remain -1, resulting in no paragraph being focused.
     }
     
     let currentLineCharOffset = 0;
@@ -355,7 +391,6 @@ function getSelectionState(el) {
       else if (lineText.startsWith("#### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1.5; }
       else if (lineText.startsWith("##### ")) { isHeading = true; currentLineFontSize = bodyFontSize * 1; }
 
-      div.textContent = lineText || '\u200B';
       div.style.fontSize = currentLineFontSize + 'px';
       div.style.lineHeight = String(baseLineHeight);
 
@@ -375,40 +410,67 @@ function getSelectionState(el) {
           div.style.marginTop = '0px';
       }
 
-      // Apply color based on focus mode
-      if (mode === 'full') {
-        div.style.color = 'var(--fg)';
-      } else if (mode === 'sentence') {
-        let isLineInFocusedSentence = false;
-        // Ensure `sentences` is available from the pre-calculation block
-        if (sentences && sentences.length > 0 && focusedSentenceIndices.size > 0) {
-          const lineStartOffset = currentLineCharOffset;
-          const lineEndOffset = currentLineCharOffset + lineText.length;
-          
-          for (const sentenceIdx of focusedSentenceIndices) {
-            // Check if sentenceIdx is a valid index for the sentences array
-            if (sentenceIdx >= 0 && sentenceIdx < sentences.length) {
-              const s = sentences[sentenceIdx];
-              // Check for overlap: (LineStart is before or at SentenceEnd) AND (LineEnd is after or at SentenceStart)
-              if (lineStartOffset <= s.end && lineEndOffset >= s.start) {
-                isLineInFocusedSentence = true;
-                break;
-              }
-            }
+      /* ---- build line DOM ---- */
+      if (mode !== 'sentence') {
+        /* keep old behaviour for paragraph / full */
+        div.textContent = lineText || '\u200B';
+      } else {
+        /* sentence-focus : split the line into spans if needed            *
+         * line range  : [lineStart , lineEndInclusive]                    *
+         * focus range : [focusStartIndex , focusEndIndex]                 */
+        const lineStart        = currentLineCharOffset;
+        const lineEndInclusive = currentLineCharOffset + lineText.length - 1;
+
+        const overlapStart = Math.max(lineStart,        focusStartIndex);
+        const overlapEnd   = Math.min(lineEndInclusive, focusEndIndex);
+
+        if (overlapStart > overlapEnd) {
+          /* no overlap ⇒ whole line dimmed */
+          div.textContent = lineText || '\u200B';
+          div.style.color = 'var(--dim)';
+        } else if (lineStart === overlapStart && lineEndInclusive === overlapEnd) {
+          /* full overlap ⇒ whole line focused */
+          div.textContent = lineText || '\u200B';
+          div.style.color = 'var(--fg)';
+        } else {
+          /* partial overlap ⇒ split into three spans */
+          const before = lineText.slice(0, overlapStart - lineStart);
+          const focus  = lineText.slice(overlapStart - lineStart,
+                                        overlapEnd   - lineStart + 1);
+          const after  = lineText.slice(overlapEnd + 1 - lineStart);
+
+          if (before) {
+            const s = document.createElement('span');
+            s.textContent = before;
+            s.style.color = 'var(--dim)';
+            div.append(s);
           }
-          div.style.color = isLineInFocusedSentence ? 'var(--fg)' : 'var(--dim)';
-        } else { 
-          // If no sentences were parsed or no focused sentences, dim the line
-          // Or, if content is empty, this path might be taken.
-          div.style.color = (fullContent.trim() === "") ? 'var(--fg)' : 'var(--dim)';
+          if (focus) {
+            const s = document.createElement('span');
+            s.textContent = focus;
+            s.style.color = 'var(--fg)';
+            div.append(s);
+          }
+          if (after) {
+            const s = document.createElement('span');
+            s.textContent = after;
+            s.style.color = 'var(--dim)';
+            div.append(s);
+          }
         }
-      } else if (mode === 'paragraph') {
-        const isInFocusedParagraph = (activeParaStart !== -1 && i >= activeParaStart && i <= activeParaEnd);
-        div.style.color = isInFocusedParagraph ? 'var(--fg)' : 'var(--dim)';
       }
-      
+
+      /* colour handling for paragraph/full that was removed above */
+      if (mode === 'paragraph') {
+        const inPara = activeParaStart !== -1 && i >= activeParaStart && i <= activeParaEnd;
+        div.style.color = inPara ? 'var(--fg)' : 'var(--dim)';
+      } else if (mode === 'full') {
+        div.style.color = 'var(--fg)';
+      }
+
       editor.append(div);
-      currentLineCharOffset += lineText.length + 1; // +1 for the newline character
+      /* advance char offset (newline only if not last line) */
+      currentLineCharOffset += lineText.length + (i < originalLines.length - 1 ? 1 : 0);
     });
     setSelectionState(editor, selectionDetails);
     
@@ -497,6 +559,7 @@ function getSelectionState(el) {
     if (savedMode) {
       mode = savedMode;
     } // Else, `mode` keeps its default 'sentence'
+    // updateActiveModeButton(); // Moved to after initial render
 
     const savedFontSize = localStorage.getItem(localStorageFontSizeKey);
     if (savedFontSize) {
@@ -528,10 +591,14 @@ function getSelectionState(el) {
 
   loadUISettings(); // Load UI settings first
   const initialLoadData = loadFromLocalStorage();
-  editor.innerText = initialLoadData.content;
+  editor.innerText = initialLoadData.content || ""; // Ensure content is not null
+  if (editor.innerText === "") { // If loaded content is empty, ensure a ZWS for proper rendering
+    editor.innerHTML = '<div>\u200B</div>'; 
+  }
   // Initial render builds the DOM structure based on innerText
   render(); 
   // After the DOM is built by render, set the selection state.
   // The render() call itself will try to restore selection, but this ensures the loaded one is prioritized for the very first load.
   setSelectionState(editor, initialLoadData.selection); 
   updateThemeToggleButtonIcon(); // Set initial theme icon
+  updateActiveModeButton(); // Set initial active mode button after settings are loaded and DOM might be ready
