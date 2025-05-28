@@ -292,8 +292,9 @@ let prevCaretY = null;
     const bodyFontSize = fontSize;
 
     // --- Sentence Focus Mode: Pre-calculation ---
-    let focusStartIndex = 0, focusEndIndex = -1;
-    if (focusEnabled && fullContent.trim()) {
+    let focusStartIndex = 0, focusEndIndex = -1; // Default if focus is off or content is effectively empty.
+
+    if (focusEnabled && fullContent.trim()) { // Focus is ON and there's actual non-whitespace content.
       // 1. Calculate absolute cursor character offset
       let absoluteCursorOffset = 0;
       for (let i = 0; i < selectionDetails.endLineIndex; i++) {
@@ -304,19 +305,14 @@ let prevCaretY = null;
 
       // 2. Determine focusStartIndex
       // Check characters before cursor in descending order
+      // (Existing logic for focusStartIndex remains unchanged)
       let terminatorsFoundBackwards = 0;
-      
       for (let i = absoluteCursorOffset - 1; i >= 0; i--) {
         const char = fullContent[i];
-        // Check if character is a sentence terminator
         if (char === '.' || char === '!' || char === '?' || char === '…') {
           terminatorsFoundBackwards++;
-          
-          // When we find the second terminator, set start position to caret position after this character
           if (terminatorsFoundBackwards === 2) {
-            focusStartIndex = i + 1; // Position right after terminator
-            
-            // Skip any whitespace after the terminator
+            focusStartIndex = i + 1; 
             while (focusStartIndex < fullContent.length && /\s/.test(fullContent[focusStartIndex])) {
               focusStartIndex++;
             }
@@ -324,36 +320,57 @@ let prevCaretY = null;
           }
         }
       }
-      // If fewer than 2 terminators found, focusStartIndex remains 0 (beginning of document)
+      // If fewer than 2 terminators found before cursor, focusStartIndex remains 0.
 
       // 3. Determine focusEndIndex
-      // Check characters after cursor in ascending order
+      // Initialize focusEndIndex to the end of the document.
+      // This ensures that if no terminators are found after the cursor, or only one,
+      // the focus correctly extends to the end of the current sentence or document.
+      focusEndIndex = fullContent.length - 1; // Since fullContent.trim() is true, fullContent.length > 0.
+
       let terminatorsFoundForwards = 0;
-      
       for (let i = absoluteCursorOffset; i < fullContent.length; i++) {
         const char = fullContent[i];
-        // Check if character is a sentence terminator
         if (char === '.' || char === '!' || char === '?' || char === '…') {
           terminatorsFoundForwards++;
-          
-          // When we find the second terminator, set end position to this character's position
+          if (terminatorsFoundForwards === 1) {
+            // Found the end of the sentence the cursor is in (or the first sentence starting at/after cursor).
+            // Update focusEndIndex to include this terminator.
+            focusEndIndex = i; 
+            // Continue searching, in case there's a "next" sentence to include.
+          }
           if (terminatorsFoundForwards === 2) {
-            focusEndIndex = i - 1; // position *before* the 2nd terminator
-            break;
+            // Found the end of the sentence *after* the one the cursor is in (or second sentence from cursor).
+            // Update focusEndIndex to include this terminator as well.
+            focusEndIndex = i; 
+            break; // We want to focus up to the end of this "next" sentence.
           }
         }
       }
-      // If fewer than 2 terminators found, focusEndIndex remains fullContent.length - 1 (end of document)
-    } else if (focusEnabled && fullContent.trim().length === 0) {
-      focusStartIndex = focusEndIndex = 0;
+      // After this loop:
+      // - If 0 terminators found after cursor: focusEndIndex is (and remains) fullContent.length - 1.
+      // - If 1 terminator found: focusEndIndex is at that terminator (end of current/first sentence).
+      // - If 2+ terminators found: focusEndIndex is at the second terminator (end of next/second sentence).
+      
+    } else if (focusEnabled && fullContent.trim().length === 0) { // Focus is ON, content is empty or whitespace only.
+      focusStartIndex = 0;
+      focusEndIndex = 0; 
     }
     // --- End Sentence Focus Mode Pre-calculation ---
 
     // log only when focus is on
-    if (focusEnabled && (focusStartIndex !== prevFocusStart || focusEndIndex !== prevFocusEnd)) {
-      console.log(`Sentence focus range updated: start=${focusStartIndex}, end=${focusEndIndex}`);
-      prevFocusStart = focusStartIndex;
-      prevFocusEnd   = focusEndIndex;
+    if (focusEnabled) {
+      const hasFocusIndicesChanged = (focusStartIndex !== prevFocusStart || focusEndIndex !== prevFocusEnd);
+      
+      // For debugging: Log current and previous values on every render cycle when focus is enabled.
+      // This helps to see if the values are changing as expected, regardless of whether the "updated" message fires.
+      console.log(`Focus Debug: Current(S:${focusStartIndex},E:${focusEndIndex}), Prev(S:${prevFocusStart},E:${prevFocusEnd}), Changed this cycle:${hasFocusIndicesChanged}`);
+
+      if (hasFocusIndicesChanged) {
+        console.log(`Sentence focus range updated: start=${focusStartIndex}, end=${focusEndIndex}`);
+        prevFocusStart = focusStartIndex;
+        prevFocusEnd   = focusEndIndex;
+      }
     }
 
     let currentLineCharOffset = 0;
