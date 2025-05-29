@@ -171,7 +171,8 @@ const editor = {
         let run = 0, target = null, inner = 0;
 
         for (const el of blocks) {
-            const len = el.innerText.length;
+            // Use innerText for block length calculation to be consistent with getAbsoluteCaretPosition
+            const len = el.innerText.length; 
             if (run + len + 1 > abs) {              // caret belongs here
                 inner  = abs - run;
                 target = el;
@@ -179,36 +180,75 @@ const editor = {
             }
             run += len + 1;
         }
-        if (!target) return 0;
+        
+        if (!target) {
+            if (blocks.length > 0) {
+                target = blocks[blocks.length - 1];
+                inner = target.innerText.length; 
+            } else { 
+                this.editorEl.focus();
+                return 0; 
+            }
+        }
 
-        const marker     = target.querySelector('.heading-marker');
-        const markerLen  = marker ? marker.innerText.length : 0;
-        const caretLocal = Math.max(inner - markerLen, 0);   // offset in text node
+        // 'inner' is now sel.anchorOffset within the content text node of the 'target' block.
+        // For example, if target is <h2><span class="marker">##</span>\u200BText</h2>,
+        // and caret was at \u200BTe|xt, then inner would be 3.
 
-        const findText = n => {
+        const findText = n => { 
             if (n.nodeType === Node.TEXT_NODE &&
-                !n.parentNode.classList.contains('heading-marker')) return n;
-            for (const c of n.childNodes) {
-                const t = findText(c);
-                if (t) return t;
+                (!n.parentNode || !n.parentNode.classList.contains('heading-marker'))) return n;
+            if (n.childNodes) { 
+                for (const c of n.childNodes) {
+                    const t = findText(c);
+                    if (t) return t;
+                }
             }
             return null;
         };
-        const tn = findText(target);
-        if (!tn) return 0;
 
-        // Skip the leading ZWSP (\u200B) if present
-        const startsWithZWSP = tn.data.charCodeAt(0) === 0x200B;
-        const caretPos = startsWithZWSP ? Math.min(caretLocal + 1, tn.data.length)
-                                        : Math.min(caretLocal,     tn.data.length);
+        const tn = findText(target); 
+        if (!tn) {
+            if (target) target.focus();
+            return 0;
+        }
+
+        // 'inner' is the desired offset within the text node 'tn'.
+        // No complex mapping with markerLen or caretLocal is needed here if 'inner'
+        // directly comes from sel.anchorOffset of the content text node.
+        let caretPos = inner;
+        
+        // Ensure caretPos is within the bounds of the text node's data.
+        caretPos = Math.min(caretPos, tn.data.length);
+        caretPos = Math.max(0, caretPos); 
 
         const sel = window.getSelection();
         const rng = document.createRange();
-        rng.setStart(tn, caretPos);
-        rng.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(rng);
-        return caretPos + markerLen;
+        try {
+            rng.setStart(tn, caretPos);
+            rng.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(rng);
+        } catch (e) {
+            console.error("Error setting caret in restoreCaret:", e, {tnData: tn.data, caretPos, inner, abs});
+            if(target) target.focus(); // Fallback
+        }
+        
+        // Calculate the effective absolute position for return.
+        // This part is for informational return value, not critical for the fix itself.
+        let effectiveAbsPos = run; // Length of preceding blocks
+        const marker = target.querySelector('.heading-marker');
+        const markerLen = marker ? marker.innerText.length : 0;
+        // Add marker length (from innerText)
+        effectiveAbsPos += markerLen;
+        // Add caret position within the visible part of the content text node
+        const startsWithZWSP = tn.data.startsWith('\u200B');
+        if (startsWithZWSP) {
+            effectiveAbsPos += Math.max(0, caretPos - 1);
+        } else {
+            effectiveAbsPos += caretPos;
+        }
+        return effectiveAbsPos;
     },
 
     /* header detection – replaces paragraph <div> with semantic <hX>  */
