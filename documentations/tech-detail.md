@@ -15,13 +15,13 @@ On every key press and mouse click
 - Detect and store current caret position considering the current DOM
 - Use the DOM and use regex to detect various formatting sections.
   - Header sections:
-    - Real-time detection using syntax identifiers: `# `, `## `, `### `, `#### `, `##### `, `###### `
+    - Real-time detection using syntax identifiers: `# `, `## `, etc. (matches regular space, non-breaking space, zero-width space, en space, em space, and thin space after hashes).
   - List sections
   - Focus mode sections
   - Text style sections
-- Split all sections using spans
+- Split all sections using spans within the preserved structure of the DOM
 - Apply correct formatting by assigning the appropriate CSS classes
-- Update DOM
+- Update the preserved DOM with the new added spans and formatting classes.
 - Preserve caret position
 
 ## Leverage browser edit behavior
@@ -45,6 +45,7 @@ Inline Code	`code`	code
 
 - Header is detected in real time using the following syntax identifier
   - `# `, `## `, `### `, `#### `, `##### `, `###### `,
+  - The space after the hash(es) can be a regular space, non-breaking space (U+00A0), zero-width space (U+200B), en space (U+2002), em space (U+2003), or thin space (U+2009) to accommodate various text sources.
 
 - **Single Hash**: `# ` → H1 (3x base font size, bold)
 - **Double Hash**: `## ` → H2 (2x base font size, bold)  

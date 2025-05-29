@@ -41,9 +41,29 @@ const editor = {
         });
 
         // editor change events
-        this.editorEl.addEventListener('input',  this.formatContent.bind(this));
-        this.editorEl.addEventListener('click',  this.formatContent.bind(this));
-        this.editorEl.addEventListener('keyup',  this.formatContent.bind(this));
+        this.editorEl.addEventListener('input', () => {
+            if (!this.lastLogTrigger) { // Set if not already set by a more specific event like keydown
+                this.lastLogTrigger = 'input';
+            }
+            this.formatContent();
+        });
+        this.editorEl.addEventListener('click', () => {
+            // Click also triggers mousedown which sets lastLogTrigger.
+            // If we want click to be distinct for formatContent:
+            // this.lastLogTrigger = 'click_format'; // Or just let mousedown's 'click' be used.
+            this.formatContent();
+        });
+        this.editorEl.addEventListener('keyup', () => {
+            // Keyup might follow a keydown that set lastLogTrigger.
+            // If not (e.g. some special keys, or if keydown didn't set it),
+            // we could set a generic 'keyup' trigger.
+            // However, 'input' event is generally preferred for content changes.
+            if (!this.lastLogTrigger && ! (event.key === 'Enter' || event.key === 'Backspace')) {
+                 // Avoid overwriting specific triggers if keyup is for Enter/Backspace
+                 // and preDomSnapshot was taken.
+            }
+            this.formatContent();
+        });
 
         /* ── Enter logging ───────────────────────────────────────────── */
         // This preEnterDOM seems redundant if preDomSnapshot handles Enter,
@@ -73,22 +93,30 @@ const editor = {
     formatContent() {
         if (this.isSelecting) return;
         if (this.devToggle && !this.devToggle.checked) return;
+        // console.log('[Log] formatContent triggered.'); // Reduced verbosity, can be re-enabled if needed
         setTimeout(() => {
-            let absCaretPos = this.getAbsoluteCaretPosition(); // Initial caret position
-            const triggerType = this.lastLogTrigger || 'unknown';
+            let absCaretPos = this.getAbsoluteCaretPosition();
+            const triggerType = this.lastLogTrigger || 'unknown_event'; // More specific default
 
             if (this.preDomSnapshot) {
                 const visiblePreSnapshot = this.preDomSnapshot.replace(/\u200B/g, '[ZWSP]');
-                console.log(`DOM BEFORE render (Trigger: ${triggerType}) [caret=${absCaretPos}]:`, visiblePreSnapshot);
+                console.log(`[Log] DOM BEFORE (Trigger: ${triggerType}) [Caret @ ${absCaretPos}]:`, visiblePreSnapshot);
+            } else {
+                // Only log this if it's a trigger type that *should* have had a preDomSnapshot, or for general insight
+                // if (triggerType === 'Enter' || triggerType === 'Backspace' || triggerType === 'click') {
+                //    console.warn(`[Log] formatContent (Trigger: ${triggerType}) [Caret @ ${absCaretPos}] - Expected preDomSnapshot, but it was null.`);
+                // } else {
+                //    console.log(`[Log] formatContent (Trigger: ${triggerType}) [Caret @ ${absCaretPos}] - No preDomSnapshot (expected for this trigger type).`);
+                // }
             }
 
             this.processNode(this.editorEl);
-            const headingReverted = this.revertBrokenHeading(); // Returns true if a revert happened
+            const headingReverted = this.revertBrokenHeading();
 
             if (headingReverted) {
-                // If a heading was reverted, DOM changed & revertBrokenHeading set the caret.
-                // Update absCaretPos to this new position for subsequent operations in this cycle.
-                absCaretPos = this.getAbsoluteCaretPosition();
+                const newCaretPos = this.getAbsoluteCaretPosition();
+                console.log(`[Log] Heading reverted. Caret moved from ${absCaretPos} to ${newCaretPos}.`);
+                absCaretPos = newCaretPos; // Update absCaretPos to the position set by revertBrokenHeading
             }
 
             const focusToggle = document.getElementById('focus-toggle');
@@ -100,16 +128,17 @@ const editor = {
 
             if (this.preDomSnapshot) {
                 const visiblePostSnapshot = this.editorEl.innerHTML.replace(/\u200B/g, '[ZWSP]');
-                console.log(`DOM AFTER  render (Trigger: ${triggerType}) [caret=${this.getAbsoluteCaretPosition()}]:`, // Log current caret
+                console.log(`[Log] DOM AFTER (Trigger: ${triggerType}) [Caret will be restored to ${absCaretPos}, currently @ ${this.getAbsoluteCaretPosition()}]:`,
                             visiblePostSnapshot);
                 this.preDomSnapshot = null;
-                this.lastLogTrigger = null;
             }
+            this.lastLogTrigger = null; // Reset after use
 
-            this.restoreCaret(absCaretPos); // Restore to the (potentially updated) absCaretPos
+            this.restoreCaret(absCaretPos);
             if (this.caretInput) {
                 this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
             }
+            // console.log('[Log] formatContent finished.'); // Reduced verbosity
         }, 10);
     },
     /* util: all top-level blocks (div, h1-h6 …) */
@@ -185,16 +214,28 @@ const editor = {
     /* header detection – replaces paragraph <div> with semantic <hX>  */
     processNode(node) {
         if (node.nodeType === Node.TEXT_NODE) {
-            // skip blanks, text inside existing headings, or inside the marker
+            const textContentForLog = node.textContent
+                .replace(/\u200B/g, '[ZWSP]')
+                .replace(/\u00A0/g, '[NBSP]')
+                .replace(/\u2002/g, '[ENSP]')
+                .replace(/\u2003/g, '[EMSP]')
+                .replace(/\u2009/g, '[THSP]');
             if (
                 !node.textContent.trim() ||
                 /^h[1-6]$/i.test(node.parentNode.tagName) ||
                 node.parentNode.classList.contains('heading-marker')
-            ) return;
+            ) {
+                // Optional: Log why it was skipped if node.textContent starts with #
+                // if (node.textContent.startsWith('#')) {
+                //     console.log(`[Log] processNode: Skipped processing for potential heading "${textContentForLog}" due to guard conditions.`);
+                // }
+                return;
+            }
 
-            // Match "# "  OR  "#\u200B"
-            const m = node.textContent.match(/^(#{1,6})(?: |\u200B)(.*)$/);
+            // Match "#" followed by: regular space, ZWSP, NBSP, ENSP, EMSP, or THSP
+            const m = node.textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
             if (m) {
+                console.log(`[Log] processNode: Matched heading syntax in textContent: "${textContentForLog}"`);
                 /* locate the top-level block (<div>) that holds the text node */
                 let block = node.parentNode;
                 while (block && block.parentNode !== this.editorEl) block = block.parentNode;
@@ -211,7 +252,10 @@ const editor = {
 
                 h.append(marker, body);
                 block.replaceWith(h);
+                console.log(`[Log] processNode: Replaced <div> with <h${level}>.`);
                 return;
+            } else if (node.textContent.match(/^\s*#{1,6}/)) { // Starts with optional spaces then #
+                console.log(`[Log] processNode: Potential heading prefix found but NO MATCH for full heading syntax: "${textContentForLog}"`);
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
             for (const child of Array.from(node.childNodes)) this.processNode(child);
@@ -259,23 +303,24 @@ const editor = {
 
     /* revert <hX> back to <div> if ZWSP was deleted with Backspace */
     revertBrokenHeading() {
-        let reverted = false; // Flag to indicate if any heading was reverted
+        let reverted = false;
         for (const h of this.editorEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
             const marker = h.querySelector('.heading-marker');
             if (!marker) continue;
 
             let n = marker.nextSibling;
-            // Skip any non-text, non-BR nodes (e.g., other spans if they existed)
             while (n && n.nodeType !== Node.TEXT_NODE && n.tagName !== 'BR') {
                 n = n.nextSibling;
             }
 
             const isTextNode = n && n.nodeType === Node.TEXT_NODE;
-            const broken = !n ||                                       // Nothing after marker
-                           (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') || // It's a BR
-                           (isTextNode && n.data.charCodeAt(0) !== 0x200B); // Text node doesn't start with ZWSP
+            const currentTextContentForLog = isTextNode ? n.data.replace(/\u200B/g, '[ZWSP]') : (n ? n.tagName : 'null');
+            const broken = !n ||
+                           (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') ||
+                           (isTextNode && n.data.charCodeAt(0) !== 0x200B);
 
             if (broken) {
+                console.log(`[Log] revertBrokenHeading: Detected broken heading <${h.tagName}>. Next sibling content: "${currentTextContentForLog}". Reverting to <div>.`);
                 // If original text node existed, get its data (strip leading ZWSP if it was there but somehow broken logic missed it)
                 const body = isTextNode ? n.data.replace(/^[\u200B]/, '') : '';
                 
@@ -285,6 +330,8 @@ const editor = {
                 div.textContent = marker.textContent + body; 
                 h.replaceWith(div);
                 reverted = true;
+                const divContentForLog = div.textContent.replace(/\u200B/g, '[ZWSP]');
+                console.log(`[Log] revertBrokenHeading: Reverted to <div> with content: "${divContentForLog}". Caret set after marker.`);
 
                 const tn = div.firstChild; // Should be the text node we just created
                 if (tn && tn.nodeType === Node.TEXT_NODE) {
@@ -300,7 +347,7 @@ const editor = {
                 }
             }
         }
-        return reverted; // Return the flag
+        return reverted;
     },
 };
 
