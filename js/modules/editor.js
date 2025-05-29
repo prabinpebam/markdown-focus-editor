@@ -2,9 +2,26 @@ const editor = {
     init() {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
+        this.editorEl.focus();                     // focus on page-load
 
+        this.caretInput = document.getElementById('caret-pos'); // ← NEW
         this.devToggle = document.getElementById('dev-toggle');   // ← NEW
         this.isSelecting = false;                          // ← NEW FLAG
+
+        /* ── DOM-snapshot triggers ─────────────────────────────────────── */
+        this.preDomSnapshot = null;                              // single snapshot store
+
+        // Enter key → snapshot before browser inserts newline
+        this.editorEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                this.preDomSnapshot = this.editorEl.innerHTML;
+            }
+        });
+
+        // Mouse click → snapshot at mousedown (before caret moves)
+        this.editorEl.addEventListener('mousedown', () => {
+            this.preDomSnapshot = this.editorEl.innerHTML;
+        });
 
         // --- selection tracking (mouse) ---
         this.editorEl.addEventListener('mousedown', () =>  this.isSelecting = true);
@@ -32,6 +49,18 @@ const editor = {
                 this.preEnterDOM = this.editorEl.innerHTML;   // snapshot before browser change
             }
         });
+
+        /* ── caret-field change → move caret ─────────────────────────── */
+        if (this.caretInput){
+            this.caretInput.addEventListener('change', () => {
+                const max   = this.editorEl.innerText.length;
+                let   pos   = parseInt(this.caretInput.value,10);
+                if (isNaN(pos) || pos < 0) pos = 0;
+                if (pos > max) pos = max;
+                this.caretInput.value = pos;
+                this.restoreCaret(pos);            // jump caret
+            });
+        }
     },
 
     formatContent() {
@@ -40,12 +69,11 @@ const editor = {
         setTimeout(() => {
             const absCaretPos = this.getAbsoluteCaretPosition();
 
-            /* log DOM + caret before render (only on Enter) */
-            if (this.preEnterDOM !== null) {
-                console.log(`DOM BEFORE render (Enter) [caret=${absCaretPos}]:`, this.preEnterDOM);
+            if (this.preDomSnapshot) {
+                console.log(`DOM BEFORE render [caret=${absCaretPos}]:`, this.preDomSnapshot);
             }
 
-            this.processNode(this.editorEl);
+            this.processNode(this.editorEl);           // ← no more cleanZeroWidthSpace()
 
             const focusToggle = document.getElementById('focus-toggle');
             if (focusToggle && focusToggle.checked) {
@@ -54,115 +82,137 @@ const editor = {
                 this.applyFocusFormatting(focusRange);
             }
 
-            /* log DOM + caret after render (only on Enter) */
-            if (this.preEnterDOM !== null) {
-                console.log(`DOM AFTER  render (Enter)  [caret=${this.getAbsoluteCaretPosition()}]:`, this.editorEl.innerHTML);
-                this.preEnterDOM = null;
+            if (this.preDomSnapshot) {
+                console.log(`DOM AFTER  render  [caret=${this.getAbsoluteCaretPosition()}]:`,
+                            this.editorEl.innerHTML);
+                this.preDomSnapshot = null;
             }
 
             this.restoreCaret(absCaretPos);
+            if (this.caretInput) {
+                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+            }
         }, 10);
     },
     /* util: all top-level blocks (div, h1-h6 …) */
     getBlocks() {
-        return Array.from(this.editorEl.children);   // direct children only
+        return Array.from(this.editorEl.children); // direct children only
     },
 
-    /* NEW – compute absolute caret index */
+    /* absolute caret index – just rely on innerText (includes “# ”) */
     getAbsoluteCaretPosition() {
         const sel = window.getSelection();
         if (!sel || !sel.anchorNode) return 0;
 
-        // Ascend to the direct child of #editor that contains the caret
         let block = sel.anchorNode;
         while (block && block.parentNode !== this.editorEl) block = block.parentNode;
 
-        const blocks = this.getBlocks();
         let offset = 0;
-        for (const el of blocks) {
+        for (const el of this.getBlocks()) {
             if (el === block) {
-                if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
-                    offset += sel.anchorOffset;
-                }
+                if (sel.anchorNode.nodeType === Node.TEXT_NODE) offset += sel.anchorOffset;
                 break;
             }
-            offset += el.innerText.length + 1;       // count newline per block
+            offset += el.innerText.length + 1; // newline after each block
         }
         return offset;
     },
 
-    // Restore caret given absolute index (works for div & heading blocks)
+    /* restore caret – lands after the marker span */
     restoreCaret(abs) {
         const blocks = this.getBlocks();
-        let run = 0, target = null, innerOff = 0;
+        let run = 0, target = null, inner = 0;
 
         for (const el of blocks) {
             const len = el.innerText.length;
-            if (run + len + 1 > abs) {      // caret is inside this block
-                innerOff = abs - run;
-                target   = el;
+            if (run + len + 1 > abs) {              // caret belongs here
+                inner  = abs - run;
+                target = el;
                 break;
             }
-            run += len + 1;                 // newline per block
+            run += len + 1;
         }
         if (!target) return 0;
 
-        /* locate first text node in target */
-        function firstText(n) {
-            if (n.nodeType === Node.TEXT_NODE) return n;
+        const marker     = target.querySelector('.heading-marker');
+        const markerLen  = marker ? marker.innerText.length : 0;
+        const caretLocal = Math.max(inner - markerLen, 0);   // offset in text node
+
+        const findText = n => {
+            if (n.nodeType === Node.TEXT_NODE &&
+                !n.parentNode.classList.contains('heading-marker')) return n;
             for (const c of n.childNodes) {
-                const t = firstText(c);
+                const t = findText(c);
                 if (t) return t;
             }
             return null;
-        }
-        const tn = firstText(target);
+        };
+        const tn = findText(target);
         if (!tn) return 0;
+
+        // Skip the leading ZWSP (\u200B) if present
+        const startsWithZWSP = tn.data.charCodeAt(0) === 0x200B;
+        const caretPos = startsWithZWSP ? Math.min(caretLocal + 1, tn.data.length)
+                                        : Math.min(caretLocal,     tn.data.length);
 
         const sel = window.getSelection();
         const rng = document.createRange();
-        rng.setStart(tn, Math.min(innerOff, tn.textContent.length));
+        rng.setStart(tn, caretPos);
         rng.collapse(true);
         sel.removeAllRanges();
         sel.addRange(rng);
-        return innerOff;
+        return caretPos + markerLen;
     },
 
-    // Process blocks – header detection now replaces wrapper block (div) with <hX>
+    /* header detection – replaces paragraph <div> with semantic <hX>  */
     processNode(node) {
         if (node.nodeType === Node.TEXT_NODE) {
-            if (!node.textContent.trim() || /^h[1-6]$/i.test(node.parentNode.tagName)) return;
+            // skip blanks, text inside existing headings, or inside the marker
+            if (
+                !node.textContent.trim() ||
+                /^h[1-6]$/i.test(node.parentNode.tagName) ||
+                node.parentNode.classList.contains('heading-marker')
+            ) return;
 
-            const m = node.textContent.match(/^(#{1,6})\s+(.*)$/);
+            const m = node.textContent.match(/^(#{1,6})\s?(.*)$/); // hashes + optional rest
             if (m) {
-                const lvl = m[1].length;
-                const block = node.parentNode;
+                /* locate the top-level block (<div>) that holds the text node */
+                let block = node.parentNode;
                 while (block && block.parentNode !== this.editorEl) block = block.parentNode;
                 if (!block) return;
 
-                const h = document.createElement(`h${lvl}`);
-                h.textContent = m[0];                      // keep "# "
+                const level   = m[1].length;          // 1–6
+                const rawBody = m[2] || '';           // may be empty or already have text
+                const body    = '\u200B' + rawBody;   // always start with ZWSP
+
+                const h = document.createElement(`h${level}`);
+
+                const marker = document.createElement('span');
+                marker.className   = 'heading-marker';
+                marker.textContent = m[1];            // hash marks only, no space
+
+                h.append(marker, body);
                 block.replaceWith(h);
-                console.log(`DOM before header transform [caret=${this.getAbsoluteCaretPosition()}]:`, this.editorEl.innerHTML);
                 return;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            for (const c of Array.from(node.childNodes)) this.processNode(c);
+            for (const child of Array.from(node.childNodes)) this.processNode(child);
         }
     },
-    // Focus formatting function (simple example).
+    // Focus-mode formatting – NON-destructive
     applyFocusFormatting(focusRange) {
-        const fullText = this.editorEl.innerText;
-        const before = fullText.substring(0, focusRange.start);
-        const focusText = fullText.substring(focusRange.start, focusRange.end);
-        const after = fullText.substring(focusRange.end);
-        // For a simple solution, update innerHTML with spans only for focus sections;
-        // In a robust implementation, update only the needed nodes.
-        this.editorEl.innerHTML =
-            `<span style="opacity:0.3;">${before}</span>` +
-            `<span style="opacity:0.9;">${focusText}</span>` +
-            `<span style="opacity:0.3;">${after}</span>`;
+        const blocks = this.getBlocks();
+        let run = 0;
+        for (const el of blocks) {
+            const len = el.innerText.length;
+            const inRange =
+                run + len >= focusRange.start &&   // overlaps focus range
+                run <= focusRange.end;
+            el.style.opacity = inRange ? '0.9' : '0.3';
+            run += len + 1;                        // +1 for virtual newline
+        }
     },
+
     calculateFocusRange(text, caretPos) {
         const terminatorRegex = /[.!?…]/;
         let start = 0, end = text.length;
