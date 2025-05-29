@@ -2,14 +2,6 @@ const editor = {
     init() {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
-        // Log Enter press and capture current DOM for debugging.
-        this.editorEl.addEventListener('keydown', (e) => {
-            if (e.key === "Enter") {
-                setTimeout(() => {
-                    console.log("DOM captured after Enter:", this.editorEl.innerHTML);
-                }, 10);
-            }
-        });
         // Bind events (input, click, keyup) using native behavior.
         this.editorEl.addEventListener('input', this.formatContent.bind(this));
         this.editorEl.addEventListener('click', this.formatContent.bind(this));
@@ -20,7 +12,6 @@ const editor = {
         setTimeout(() => {
             // Step 1: Capture the absolute caret position from the current DOM.
             const absCaretPos = this.getAbsoluteCaretPosition();
-            console.log("Detected initial absolute caret position:", absCaretPos);
             
             // Step 2: Instead of replacing innerHTML wholesale, process in-place.
             // This preserves the DOM structure created by the browser (e.g. div+br from Enter).
@@ -31,14 +22,12 @@ const editor = {
             if (focusToggle && focusToggle.checked) {
                 const text = this.editorEl.innerText;
                 const focusRange = this.calculateFocusRange(text, absCaretPos);
-                console.log("Calculated focus range:", focusRange);
                 // In a robust solution, update only text nodes covering focusRange.
                 this.applyFocusFormatting(focusRange);
             }
             
             // Step 3: Restore the caret position based on the new DOM.
             const newAbsPos = this.getAbsoluteCaretPosition();
-            console.log("After render absolute caret position:", newAbsPos);
             this.restoreCaret(absCaretPos);
         }, 10);
     },
@@ -46,7 +35,6 @@ const editor = {
     getAbsoluteCaretPosition() {
         const sel = window.getSelection();
         if (!sel || !sel.anchorNode) {
-            console.log("No selection available.");
             return 0;
         }
         // Find the paragraph (div) element that contains the caret.
@@ -103,7 +91,6 @@ const editor = {
                 this.processNode(child);
             }
         }
-        // ...existing code...
     },
     // Focus formatting function (simple example).
     applyFocusFormatting(focusRange) {
@@ -170,7 +157,6 @@ const editor = {
                 }
             }
         }
-        console.log("Focus start index determined at:", start, "(walking back from", caretPos, ")");
         count = 0;
         for (let i = caretPos; i < text.length; i++) {
             if (terminatorRegex.test(text.charAt(i))) {
@@ -181,10 +167,8 @@ const editor = {
                 }
             }
         }
-        console.log("Focus end index determined at:", end, "(walking forward from", caretPos, ")");
         return { start, end };
     }
-    // ...existing code...
 };
 
 export default editor;
