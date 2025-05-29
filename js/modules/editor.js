@@ -2,13 +2,31 @@ const editor = {
     init() {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
-        // Bind events (input, click, keyup) using native behavior.
-        this.editorEl.addEventListener('input', this.formatContent.bind(this));
-        this.editorEl.addEventListener('click', this.formatContent.bind(this));
-        this.editorEl.addEventListener('keyup', this.formatContent.bind(this));
+
+        this.isSelecting = false;                          // ← NEW FLAG
+
+        // --- selection tracking (mouse) ---
+        this.editorEl.addEventListener('mousedown', () =>  this.isSelecting = true);
+        document.addEventListener('mouseup',  () => {      // outside releases, too
+            if (window.getSelection().isCollapsed) this.isSelecting = false;
+        });
+
+        // --- selection tracking (keyboard: Shift + arrows etc.) ---
+        this.editorEl.addEventListener('keydown',  e => {
+            if (e.shiftKey) this.isSelecting = true;
+        });
+        this.editorEl.addEventListener('keyup',    () => {
+            if (window.getSelection().isCollapsed) this.isSelecting = false;
+        });
+
+        // editor change events
+        this.editorEl.addEventListener('input',  this.formatContent.bind(this));
+        this.editorEl.addEventListener('click',  this.formatContent.bind(this));
+        this.editorEl.addEventListener('keyup',  this.formatContent.bind(this));
     },
+
     formatContent() {
-        // Delay to let browser process the new DOM (e.g. after Enter).
+        if (this.isSelecting) return;             // ← skip while user is selecting
         setTimeout(() => {
             // Step 1: Capture the absolute caret position from the current DOM.
             const absCaretPos = this.getAbsoluteCaretPosition();
