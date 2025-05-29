@@ -7,6 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>Markdown Editor</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
   <!-- Google Font Default -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,8 +23,7 @@
     <button id="increase-font" title="Increase Font Size"><img src="images/increase-font.svg" alt="Increase Font"></button>
     <button id="decrease-font" title="Decrease Font Size"><img src="images/decrease-font.svg" alt="Decrease Font"></button>
     <button id="toggle-theme" title="Toggle Light/Dark Theme"><img src="images/dark-theme.svg" alt="Toggle Theme"></button>
-    <button id="fullscreen" title="Toggle Fullscreen"><img src="images/fullscreen.svg" alt="Fullscreen"></button>
-    <button id="font-picker" title="Change Font"><img src="images/font-picker.svg" alt="Change Font"></button>
+    <button id="fullscreen" title="Toggle Fullscreen"><img src="images/fullscreen.svg" alt="Fullscreen"></button>    
     <span class="separator"></span>
     <label class="switch" title="Focus">
         <input type="checkbox" id="focus-toggle" checked>
@@ -31,7 +32,9 @@
     <input type="file" id="file-input" accept=".txt,.md" style="display:none;">
   </div>
 
-  <div id="editor" contenteditable="true" spellcheck="false"></div>
+  <div id="editor" contenteditable="true" spellcheck="false">
+    <div>Welcome to Markdown-Focus-Editor: Your distraction-free markdown playground. Fire up your keyboard and let witty words turn into magic!</div>
+  </div>
 
   <div id="font-modal">
     <div class="content">
@@ -41,6 +44,7 @@
     </div>
   </div>
 
-  <script src="js/app.js" defer></script>
+  <!-- Main application -->
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

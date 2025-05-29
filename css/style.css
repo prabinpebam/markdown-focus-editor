@@ -1,0 +1,188 @@
+/* Base styles for the editor and document */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  line-height: 1.6;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0.5em 0;
+  font-weight: normal;
+}
+
+p {
+  margin: 0.5em 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Container for the entire editor */
+#editor {
+  padding: 2em;
+  max-width: 800px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--editor-bg);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Toolbar styles */
+#toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+  margin-bottom: 1em;
+}
+
+button {
+  padding: 0.5em 1em;
+  border: none;
+  border-radius: 4px;
+  background-color: var(--button-bg);
+  color: var(--button-fg);
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: var(--button-bg-hover);
+}
+
+/* Theme toggle button */
+#toggle-theme {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  cursor: pointer;
+}
+
+/* Font size controls */
+#font-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+/* Fullscreen button */
+#fullscreen {
+  margin-left: auto;
+}
+
+/* Hamburger menu for mobile */
+#hamburger {
+  display: none;
+}
+
+/* Media queries for responsive design */
+@media (max-width: 600px) {
+  #editor {
+    padding: 1em;
+  }
+
+  #toolbar {
+    flex-direction: column;
+    gap: 0.2em;
+  }
+
+  #hamburger {
+    display: block;
+    cursor: pointer;
+  }
+
+  #fullscreen {
+    margin-left: 0;
+  }
+}
+
+/* Dark theme styles */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #e0e0e0;
+    --accent: #bb86fc;
+    --border: #333;
+    --editor-bg: #1e1e1e;
+    --button-bg: #3700b3;
+    --button-fg: #ffffff;
+    --button-bg-hover: #6200ee;
+    --list-marker-color: #bb86fc;
+    --success-color: #03dac6;
+    --muted-color: #777;
+    --dim: #555;
+  }
+}
+
+/* Light theme styles */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --fg: #000000;
+    --accent: #6200ee;
+    --border: #ccc;
+    --editor-bg: #f9f9f9;
+    --button-bg: #6200ee;
+    --button-fg: #ffffff;
+    --button-bg-hover: #3700b3;
+    --list-marker-color: #6200ee;
+    --success-color: #22c55e;
+    --muted-color: #999;
+    --dim: #ddd;
+  }
+}
+
+/* List Item Styles */
+.list-item {
+  position: relative;
+  display: block;
+  margin-top: 0;
+}
+
+.list-marker {
+  font-family: monospace;
+  color: var(--list-marker-color, var(--fg));
+  user-select: none;
+}
+
+.list-marker.checked {
+  color: var(--success-color, #22c55e);
+}
+
+.list-marker.unchecked {
+  color: var(--muted-color, var(--dim));
+}
+
+.list-content {
+  display: inline;
+}
+
+/* Task list specific styling */
+.task-item .list-content {
+  text-decoration: none;
+}
+
+.task-item.checked .list-content {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+/* List indentation levels */
+.list-item.indent-0 { padding-left: 2em; }
+.list-item.indent-1 { padding-left: 4em; }
+.list-item.indent-2 { padding-left: 6em; }
+.list-item.indent-3 { padding-left: 8em; }
+.list-item.indent-4 { padding-left: 10em; }
+
+/* Ensure list markers don't interfere with selection */
+.list-marker {
+  pointer-events: none;
+}
