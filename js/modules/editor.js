@@ -148,6 +148,11 @@ const editor = {
             if (this.caretInput) {
                 this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
             }
+            
+            // Save content to local storage immediately after all processing
+            if (this.editorEl) {
+                storage.saveSettings('lastContent', this.editorEl.innerHTML);
+            }
             // console.log('[Log] formatContent finished.'); // Reduced verbosity
         }, 10);
     },
