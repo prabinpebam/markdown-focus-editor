@@ -10,17 +10,20 @@ const editor = {
 
         /* ── DOM-snapshot triggers ─────────────────────────────────────── */
         this.preDomSnapshot = null;                              // single snapshot store
+        this.lastLogTrigger = null;                              // To store 'Enter', 'Backspace', or 'click'
 
-        // Enter key → snapshot before browser inserts newline
+        // Enter key or Backspace → snapshot before browser default action
         this.editorEl.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.key === 'Backspace') {
                 this.preDomSnapshot = this.editorEl.innerHTML;
+                this.lastLogTrigger = e.key; // Store the key that triggered the log
             }
         });
 
         // Mouse click → snapshot at mousedown (before caret moves)
         this.editorEl.addEventListener('mousedown', () => {
             this.preDomSnapshot = this.editorEl.innerHTML;
+            this.lastLogTrigger = 'click'; // Store 'click' as the trigger
         });
 
         // --- selection tracking (mouse) ---
@@ -43,10 +46,14 @@ const editor = {
         this.editorEl.addEventListener('keyup',  this.formatContent.bind(this));
 
         /* ── Enter logging ───────────────────────────────────────────── */
-        this.preEnterDOM = null;
+        // This preEnterDOM seems redundant if preDomSnapshot handles Enter,
+        // but we'll leave it as per current structure unless asked to remove.
+        this.preEnterDOM = null; 
         this.editorEl.addEventListener('keydown', e => {
             if (e.key === 'Enter') {
-                this.preEnterDOM = this.editorEl.innerHTML;   // snapshot before browser change
+                this.preEnterDOM = this.editorEl.innerHTML; // snapshot before browser change
+                // If Enter also needs to be logged specifically via this, ensure lastLogTrigger is set
+                // this.lastLogTrigger = e.key; // This would overwrite if Enter is handled by both listeners
             }
         });
 
@@ -67,13 +74,22 @@ const editor = {
         if (this.isSelecting) return;
         if (this.devToggle && !this.devToggle.checked) return;
         setTimeout(() => {
-            const absCaretPos = this.getAbsoluteCaretPosition();
+            let absCaretPos = this.getAbsoluteCaretPosition(); // Initial caret position
+            const triggerType = this.lastLogTrigger || 'unknown';
 
             if (this.preDomSnapshot) {
-                console.log(`DOM BEFORE render [caret=${absCaretPos}]:`, this.preDomSnapshot);
+                const visiblePreSnapshot = this.preDomSnapshot.replace(/\u200B/g, '[ZWSP]');
+                console.log(`DOM BEFORE render (Trigger: ${triggerType}) [caret=${absCaretPos}]:`, visiblePreSnapshot);
             }
 
-            this.processNode(this.editorEl);           // ← no more cleanZeroWidthSpace()
+            this.processNode(this.editorEl);
+            const headingReverted = this.revertBrokenHeading(); // Returns true if a revert happened
+
+            if (headingReverted) {
+                // If a heading was reverted, DOM changed & revertBrokenHeading set the caret.
+                // Update absCaretPos to this new position for subsequent operations in this cycle.
+                absCaretPos = this.getAbsoluteCaretPosition();
+            }
 
             const focusToggle = document.getElementById('focus-toggle');
             if (focusToggle && focusToggle.checked) {
@@ -83,12 +99,14 @@ const editor = {
             }
 
             if (this.preDomSnapshot) {
-                console.log(`DOM AFTER  render  [caret=${this.getAbsoluteCaretPosition()}]:`,
-                            this.editorEl.innerHTML);
+                const visiblePostSnapshot = this.editorEl.innerHTML.replace(/\u200B/g, '[ZWSP]');
+                console.log(`DOM AFTER  render (Trigger: ${triggerType}) [caret=${this.getAbsoluteCaretPosition()}]:`, // Log current caret
+                            visiblePostSnapshot);
                 this.preDomSnapshot = null;
+                this.lastLogTrigger = null;
             }
 
-            this.restoreCaret(absCaretPos);
+            this.restoreCaret(absCaretPos); // Restore to the (potentially updated) absCaretPos
             if (this.caretInput) {
                 this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
             }
@@ -174,22 +192,22 @@ const editor = {
                 node.parentNode.classList.contains('heading-marker')
             ) return;
 
-            const m = node.textContent.match(/^(#{1,6})\s?(.*)$/); // hashes + optional rest
+            // Match "# "  OR  "#\u200B"
+            const m = node.textContent.match(/^(#{1,6})(?: |\u200B)(.*)$/);
             if (m) {
                 /* locate the top-level block (<div>) that holds the text node */
                 let block = node.parentNode;
                 while (block && block.parentNode !== this.editorEl) block = block.parentNode;
                 if (!block) return;
 
-                const level   = m[1].length;          // 1–6
-                const rawBody = m[2] || '';           // may be empty or already have text
-                const body    = '\u200B' + rawBody;   // always start with ZWSP
+                const level   = m[1].length;
+                const rawBody = m[2];              // may be empty
+                const body    = '\u200B' + rawBody;
 
-                const h = document.createElement(`h${level}`);
-
-                const marker = document.createElement('span');
-                marker.className   = 'heading-marker';
-                marker.textContent = m[1];            // hash marks only, no space
+                const h       = document.createElement(`h${level}`);
+                const marker  = document.createElement('span');
+                marker.className = 'heading-marker';
+                marker.textContent = m[1];             // only the hashes
 
                 h.append(marker, body);
                 block.replaceWith(h);
@@ -237,7 +255,53 @@ const editor = {
             }
         }
         return { start, end };
-    }
+    },
+
+    /* revert <hX> back to <div> if ZWSP was deleted with Backspace */
+    revertBrokenHeading() {
+        let reverted = false; // Flag to indicate if any heading was reverted
+        for (const h of this.editorEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+            const marker = h.querySelector('.heading-marker');
+            if (!marker) continue;
+
+            let n = marker.nextSibling;
+            // Skip any non-text, non-BR nodes (e.g., other spans if they existed)
+            while (n && n.nodeType !== Node.TEXT_NODE && n.tagName !== 'BR') {
+                n = n.nextSibling;
+            }
+
+            const isTextNode = n && n.nodeType === Node.TEXT_NODE;
+            const broken = !n ||                                       // Nothing after marker
+                           (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') || // It's a BR
+                           (isTextNode && n.data.charCodeAt(0) !== 0x200B); // Text node doesn't start with ZWSP
+
+            if (broken) {
+                // If original text node existed, get its data (strip leading ZWSP if it was there but somehow broken logic missed it)
+                const body = isTextNode ? n.data.replace(/^[\u200B]/, '') : '';
+                
+                const div = document.createElement('div');
+                // Content is just the hashes plus whatever body text remained. NO extra space added here.
+                // E.g., "#" or "#remainingText"
+                div.textContent = marker.textContent + body; 
+                h.replaceWith(div);
+                reverted = true;
+
+                const tn = div.firstChild; // Should be the text node we just created
+                if (tn && tn.nodeType === Node.TEXT_NODE) {
+                    const sel = window.getSelection();
+                    const rng = document.createRange();
+                    // Set caret position to be immediately after the hash marks.
+                    // If user types a space next, it will become e.g. "# " which then triggers heading creation.
+                    // If user types a char, it will be e.g. "#char", not a heading.
+                    rng.setStart(tn, marker.textContent.length); 
+                    rng.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(rng);
+                }
+            }
+        }
+        return reverted; // Return the flag
+    },
 };
 
 export default editor;
