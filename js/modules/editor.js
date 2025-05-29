@@ -3,6 +3,7 @@ const editor = {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
 
+        this.devToggle = document.getElementById('dev-toggle');   // ← NEW
         this.isSelecting = false;                          // ← NEW FLAG
 
         // --- selection tracking (mouse) ---
@@ -23,91 +24,130 @@ const editor = {
         this.editorEl.addEventListener('input',  this.formatContent.bind(this));
         this.editorEl.addEventListener('click',  this.formatContent.bind(this));
         this.editorEl.addEventListener('keyup',  this.formatContent.bind(this));
+
+        /* ── Enter logging ───────────────────────────────────────────── */
+        this.preEnterDOM = null;
+        this.editorEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                this.preEnterDOM = this.editorEl.innerHTML;   // snapshot before browser change
+            }
+        });
     },
 
     formatContent() {
-        if (this.isSelecting) return;             // ← skip while user is selecting
+        if (this.isSelecting) return;
+        if (this.devToggle && !this.devToggle.checked) return;
         setTimeout(() => {
-            // Step 1: Capture the absolute caret position from the current DOM.
             const absCaretPos = this.getAbsoluteCaretPosition();
-            
-            // Step 2: Instead of replacing innerHTML wholesale, process in-place.
-            // This preserves the DOM structure created by the browser (e.g. div+br from Enter).
+
+            /* log DOM + caret before render (only on Enter) */
+            if (this.preEnterDOM !== null) {
+                console.log(`DOM BEFORE render (Enter) [caret=${absCaretPos}]:`, this.preEnterDOM);
+            }
+
             this.processNode(this.editorEl);
-            
-            // (Optional) If focus mode is enabled, you could run additional formatting.
+
             const focusToggle = document.getElementById('focus-toggle');
             if (focusToggle && focusToggle.checked) {
                 const text = this.editorEl.innerText;
                 const focusRange = this.calculateFocusRange(text, absCaretPos);
-                // In a robust solution, update only text nodes covering focusRange.
                 this.applyFocusFormatting(focusRange);
             }
-            
-            // Step 3: Restore the caret position based on the new DOM.
-            const newAbsPos = this.getAbsoluteCaretPosition();
+
+            /* log DOM + caret after render (only on Enter) */
+            if (this.preEnterDOM !== null) {
+                console.log(`DOM AFTER  render (Enter)  [caret=${this.getAbsoluteCaretPosition()}]:`, this.editorEl.innerHTML);
+                this.preEnterDOM = null;
+            }
+
             this.restoreCaret(absCaretPos);
         }, 10);
     },
-    // Helper function: Compute absolute caret position from the current DOM.
+    /* util: all top-level blocks (div, h1-h6 …) */
+    getBlocks() {
+        return Array.from(this.editorEl.children);   // direct children only
+    },
+
+    /* NEW – compute absolute caret index */
     getAbsoluteCaretPosition() {
         const sel = window.getSelection();
-        if (!sel || !sel.anchorNode) {
-            return 0;
-        }
-        // Find the paragraph (div) element that contains the caret.
-        let para = sel.anchorNode;
-        while (para && para.parentNode !== this.editorEl) {
-            para = para.parentNode;
-        }
-        const paragraphs = Array.from(this.editorEl.querySelectorAll('div'));
-        let absOffset = 0;
-        for (let i = 0; i < paragraphs.length; i++) {
-            if (paragraphs[i] === para) {
-                // For the active paragraph, add the caret offset within its text.
+        if (!sel || !sel.anchorNode) return 0;
+
+        // Ascend to the direct child of #editor that contains the caret
+        let block = sel.anchorNode;
+        while (block && block.parentNode !== this.editorEl) block = block.parentNode;
+
+        const blocks = this.getBlocks();
+        let offset = 0;
+        for (const el of blocks) {
+            if (el === block) {
                 if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
-                    absOffset += sel.anchorOffset;
+                    offset += sel.anchorOffset;
                 }
                 break;
-            } else {
-                // For previous paragraphs, add their text length plus one for the newline.
-                absOffset += paragraphs[i].innerText.length + 1;
             }
+            offset += el.innerText.length + 1;       // count newline per block
         }
-        return absOffset;
+        return offset;
     },
-    // Process the DOM in-place to add formatting spans without replacing the whole innerHTML.
+
+    // Restore caret given absolute index (works for div & heading blocks)
+    restoreCaret(abs) {
+        const blocks = this.getBlocks();
+        let run = 0, target = null, innerOff = 0;
+
+        for (const el of blocks) {
+            const len = el.innerText.length;
+            if (run + len + 1 > abs) {      // caret is inside this block
+                innerOff = abs - run;
+                target   = el;
+                break;
+            }
+            run += len + 1;                 // newline per block
+        }
+        if (!target) return 0;
+
+        /* locate first text node in target */
+        function firstText(n) {
+            if (n.nodeType === Node.TEXT_NODE) return n;
+            for (const c of n.childNodes) {
+                const t = firstText(c);
+                if (t) return t;
+            }
+            return null;
+        }
+        const tn = firstText(target);
+        if (!tn) return 0;
+
+        const sel = window.getSelection();
+        const rng = document.createRange();
+        rng.setStart(tn, Math.min(innerOff, tn.textContent.length));
+        rng.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(rng);
+        return innerOff;
+    },
+
+    // Process blocks – header detection now replaces wrapper block (div) with <hX>
     processNode(node) {
         if (node.nodeType === Node.TEXT_NODE) {
-            // Example: only process text nodes that start with header markdown.
-            // Do not process if the text node is empty (e.g. the one injected by <br>).
-            const text = node.textContent;
-            if (text.trim() === "") return;
-            let newNode = null;
-            // Check for header patterns (only simple headers as an example).
-            if (/^#{1}\s/.test(text)) {
-                newNode = document.createElement("span");
-                newNode.classList.add("header", "header-1");
-                newNode.textContent = text.replace(/^#\s/, "");
-            } else if (/^#{2}\s/.test(text)) {
-                newNode = document.createElement("span");
-                newNode.classList.add("header", "header-2");
-                newNode.textContent = text.replace(/^##\s/, "");
-            } else if (/^#{3}\s/.test(text)) {
-                newNode = document.createElement("span");
-                newNode.classList.add("header", "header-3");
-                newNode.textContent = text.replace(/^###\s/, "");
-            }
-            // ...add additional patterns as needed...
-            if (newNode) {
-                node.parentNode.replaceChild(newNode, node);
+            if (!node.textContent.trim() || /^h[1-6]$/i.test(node.parentNode.tagName)) return;
+
+            const m = node.textContent.match(/^(#{1,6})\s+(.*)$/);
+            if (m) {
+                const lvl = m[1].length;
+                const block = node.parentNode;
+                while (block && block.parentNode !== this.editorEl) block = block.parentNode;
+                if (!block) return;
+
+                const h = document.createElement(`h${lvl}`);
+                h.textContent = m[0];                      // keep "# "
+                block.replaceWith(h);
+                console.log(`DOM before header transform [caret=${this.getAbsoluteCaretPosition()}]:`, this.editorEl.innerHTML);
+                return;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // Do not process browser-inserted elements (like DIV or BR) if they were not created for formatting.
-            // Process child nodes recursively.
-            for (let child of Array.from(node.childNodes)) {
-                this.processNode(child);
-            }
+            for (const c of Array.from(node.childNodes)) this.processNode(c);
         }
     },
     // Focus formatting function (simple example).
@@ -122,45 +162,6 @@ const editor = {
             `<span style="opacity:0.3;">${before}</span>` +
             `<span style="opacity:0.9;">${focusText}</span>` +
             `<span style="opacity:0.3;">${after}</span>`;
-    },
-    // UPDATED: Restore caret position based on the absolute index,
-    // treating each paragraph's text plus a one‑character separator (newline) in between.
-    restoreCaret(originalOffset) {
-        const paragraphs = Array.from(this.editorEl.querySelectorAll('div'));
-        let runningLength = 0;
-        let targetNode = null, targetOffset = 0;
-        for (let p of paragraphs) {
-            const pText = p.innerText;
-            const pLen = pText.length;
-            // If adding this paragraph (plus a newline) would surpass the target,
-            // then the caret is somewhere in this paragraph.
-            if (runningLength + pLen + 1 > originalOffset) {
-                targetOffset = originalOffset - runningLength;
-                // Find a text node inside p.
-                function getFirstTextNode(node) {
-                    if (node.nodeType === Node.TEXT_NODE) return node;
-                    for (let child of Array.from(node.childNodes)) {
-                        const found = getFirstTextNode(child);
-                        if (found) return found;
-                    }
-                    return null;
-                }
-                targetNode = getFirstTextNode(p);
-                break;
-            } else {
-                runningLength += pLen + 1; // +1 for the newline that separates paragraphs.
-            }
-        }
-        const sel = window.getSelection();
-        if (targetNode) {
-            const newRange = document.createRange();
-            newRange.setStart(targetNode, Math.min(targetOffset, targetNode.textContent.length));
-            newRange.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-            return targetOffset;
-        }
-        return 0;
     },
     calculateFocusRange(text, caretPos) {
         const terminatorRegex = /[.!?…]/;

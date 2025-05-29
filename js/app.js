@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     editor.init();
 
     // Set up toolbar events for file operations, font sizing, theme toggle & fullscreen handling
-    toolbar.init();
+    toolbar.init();           // toolbar now handles font-size buttons
 
     // Wire up file saving, opening and drag-and-drop file support
     fileManager.init();
