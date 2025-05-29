@@ -1,3 +1,5 @@
+import storage from './storage.js'; // Import storage module
+
 const editor = {
     init() {
         this.editorEl = document.getElementById('editor');
@@ -53,7 +55,15 @@ const editor = {
             // this.lastLogTrigger = 'click_format'; // Or just let mousedown's 'click' be used.
             this.formatContent();
         });
-        this.editorEl.addEventListener('keyup', () => {
+        this.editorEl.addEventListener('keyup', (e) => { // Add 'e' parameter to access event details
+            // Prevent formatting if only an arrow key was pressed (without Shift)
+            // as 'isSelecting' would have been set to false by the other keyup listener.
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
+                // If it was just an arrow key for caret movement,
+                // the other keyup listener has already set isSelecting = false.
+                return; 
+            }
+
             // Keyup might follow a keydown that set lastLogTrigger.
             // If not (e.g. some special keys, or if keydown didn't set it),
             // we could set a generic 'keyup' trigger.
@@ -289,6 +299,7 @@ const editor = {
                 const marker  = document.createElement('span');
                 marker.className = 'heading-marker';
                 marker.textContent = m[1];             // only the hashes
+                marker.contentEditable = false; // Make the marker non-editable
 
                 h.append(marker, body);
                 block.replaceWith(h);
