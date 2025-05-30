@@ -120,13 +120,26 @@ const editor = {
                 // }
             }
 
-            this.processNode(this.editorEl);
+            // Store selection details before potential DOM modification by processNode
+            const sel = window.getSelection();
+            const originalAnchorNode = sel.anchorNode;
+            const originalAnchorOffset = sel.anchorOffset;
+
+            const transformedByProcessNode = this.processNode(this.editorEl, originalAnchorNode, originalAnchorOffset);
+
+            if (transformedByProcessNode) {
+                // If processNode transformed and set the caret, update absCaretPos
+                // as the DOM structure and caret position might have changed.
+                absCaretPos = this.getAbsoluteCaretPosition();
+            }
+
             const headingReverted = this.revertBrokenHeading();
 
             if (headingReverted) {
-                const newCaretPos = this.getAbsoluteCaretPosition();
-                console.log(`[Log] Heading reverted. Caret moved from ${absCaretPos} to ${newCaretPos}.`);
-                absCaretPos = newCaretPos; // Update absCaretPos to the position set by revertBrokenHeading
+                // revertBrokenHeading also sets the caret, so update absCaretPos.
+                const newCaretPosAfterRevert = this.getAbsoluteCaretPosition();
+                // console.log(`[Log] Heading reverted. Caret moved from ${absCaretPos} to ${newCaretPosAfterRevert}.`); // Optional: if more detail needed
+                absCaretPos = newCaretPosAfterRevert; // Update absCaretPos to the position set by revertBrokenHeading
             }
 
             const focusToggle = document.getElementById('focus-toggle');
@@ -267,7 +280,7 @@ const editor = {
     },
 
     /* header detection – replaces paragraph <div> with semantic <hX>  */
-    processNode(node) {
+    processNode(node, originalAnchorNode, originalAnchorOffset) { // Pass original selection
         if (node.nodeType === Node.TEXT_NODE) {
             const textContentForLog = node.textContent
                 .replace(/\u200B/g, '[ZWSP]')
@@ -294,11 +307,11 @@ const editor = {
                 /* locate the top-level block (<div>) that holds the text node */
                 let block = node.parentNode;
                 while (block && block.parentNode !== this.editorEl) block = block.parentNode;
-                if (!block) return;
+                if (!block || block === this.editorEl) return false; // Ensure it's a child block, not the editor itself
 
                 const level   = m[1].length;
                 const rawBody = m[2];              // may be empty
-                const body    = '\u200B' + rawBody;
+                const hBodyContent = '\u200B' + rawBody; // Prepend ZWSP
 
                 const h       = document.createElement(`h${level}`);
                 const marker  = document.createElement('span');
@@ -306,16 +319,74 @@ const editor = {
                 marker.textContent = m[1];             // only the hashes
                 marker.contentEditable = false; // Make the marker non-editable
 
-                h.append(marker, body);
+                const hTextNode = document.createTextNode(hBodyContent);
+                h.append(marker, hTextNode);
+                
+                const selectionWasInBlock = block.contains(originalAnchorNode);
+
                 block.replaceWith(h);
                 console.log(`[Log] processNode: Replaced <div> with <h${level}>.`);
-                return;
+
+                // Set caret position carefully in the new heading
+                const currentSel = window.getSelection();
+                if (currentSel && selectionWasInBlock && originalAnchorNode === node) {
+                    // Caret was in the specific text node that got transformed
+                    const matchedMarkerAndSpaceLength = m[1].length + 1; // e.g., "## " is length 3
+                    
+                    // Calculate offset relative to the start of the raw body content
+                    let caretOffsetInRawBody = originalAnchorOffset - matchedMarkerAndSpaceLength;
+                    caretOffsetInRawBody = Math.max(0, caretOffsetInRawBody); // Ensure non-negative
+
+                    // New offset in hTextNode is 1 (for ZWSP) + offset in rawBody
+                    let newOffsetInHTextNode = 1 + caretOffsetInRawBody;
+                    
+                    // Ensure newOffset is within the bounds of the new text node's length
+                    newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length);
+                    // Ensure it's at least 0 (should be at least 1 due to ZWSP if hTextNode.data.length > 0)
+                    newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode); 
+
+
+                    try {
+                        const rng = document.createRange();
+                        rng.setStart(hTextNode, newOffsetInHTextNode);
+                        rng.collapse(true);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(rng);
+                        // console.log(`[Log] processNode: Caret set in new H node at offset ${newOffsetInHTextNode} (in "${hTextNode.data.replace(/\u200B/g, '[ZWSP]')}")`);
+                    } catch (e) {
+                        console.error("[Log] processNode: Error setting caret in new H node", e, { textNodeData: hTextNode.data, offset: newOffsetInHTextNode });
+                        h.focus(); // Fallback focus
+                    }
+                } else if (currentSel && selectionWasInBlock) {
+                    // Caret was in the block, but not the specific text node, or originalAnchorNode is no longer relevant.
+                    // Default to placing caret at the beginning of the user-editable text in the new heading (after ZWSP).
+                    try {
+                        const rng = document.createRange();
+                        // Ensure hTextNode has content, place after ZWSP (offset 1) or at 0 if empty (should not happen due to ZWSP)
+                        const offset = hTextNode.data.length > 0 ? 1 : 0;
+                        rng.setStart(hTextNode, Math.min(offset, hTextNode.data.length));
+                        rng.collapse(true);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(rng);
+                        // console.log(`[Log] processNode: Caret set to default in new H node (offset ${Math.min(offset, hTextNode.data.length)})`);
+                    } catch (e) {
+                        console.error("[Log] processNode: Error setting default caret in new H node", e);
+                        h.focus(); // Fallback focus
+                    }
+                }
+                // If selection was not in the block, the browser should attempt to preserve it relative to other content.
+                
+                return true; // Indicate transformation occurred
             } else if (node.textContent.match(/^\s*#{1,6}/)) { // Starts with optional spaces then #
                 console.log(`[Log] processNode: Potential heading prefix found but NO MATCH for full heading syntax: "${textContentForLog}"`);
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            for (const child of Array.from(node.childNodes)) this.processNode(child);
+            for (const child of Array.from(node.childNodes)) {
+                // Pass original selection info down for recursive calls
+                if (this.processNode(child, originalAnchorNode, originalAnchorOffset)) return true;
+            }
         }
+        return false; // No transformation in this node or its children
     },
     // Focus-mode formatting – NON-destructive
     applyFocusFormatting(focusRange) {
@@ -396,7 +467,10 @@ const editor = {
                     // Set caret position to be immediately after the hash marks.
                     // If user types a space next, it will become e.g. "# " which then triggers heading creation.
                     // If user types a char, it will be e.g. "#char", not a heading.
-                    rng.setStart(tn, marker.textContent.length); 
+                    let caretPosInDiv = marker.textContent.length;
+                    caretPosInDiv = Math.min(caretPosInDiv, tn.data.length); // Ensure within bounds
+
+                    rng.setStart(tn, caretPosInDiv); 
                     rng.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(rng);
