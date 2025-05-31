@@ -24,15 +24,11 @@ const listManager = {
         if (!this.editor || !blockNode || !match || !listType) return false;
 
         const itemText = match[3] || ''; 
-        // const leadingSpace = match[1] || ''; // Not used yet, but captured
 
         const listElement = document.createElement(listType);
         const listItemElement = document.createElement('li');
         
-        // Prepend ZWSP to ensure caret can be placed at the very beginning if itemText is empty
-        // and to provide a non-empty text node.
-        const newTextContent = '\u200B' + itemText;
-        const listItemTextNode = document.createTextNode(newTextContent);
+        const listItemTextNode = document.createTextNode(itemText);
         listItemElement.appendChild(listItemTextNode);
         listElement.appendChild(listItemElement);
 
@@ -42,13 +38,12 @@ const listManager = {
         try {
             const sel = window.getSelection();
             const rng = document.createRange();
-            // Place caret at the end of the text within the new LI
-            rng.setStart(listItemTextNode, listItemTextNode.data.length);
+            
+            rng.setStart(listItemTextNode, listItemTextNode.data.length); 
             rng.collapse(true);
             sel.removeAllRanges();
             sel.addRange(rng);
         } catch (e) {
-            // console.error("[Log] listManager: Error setting caret in new list item", e);
             listItemElement.focus(); 
         }
         return true;
@@ -56,18 +51,72 @@ const listManager = {
 
     handleTab(listItemElement) {
         if (!this.editor || !listItemElement) return;
-        // console.log('[Log] listManager: handleTab called for LI:', listItemElement.textContent.substring(0,20));
-        // TODO: Implement indentation logic
-        // If DOM is changed: console.log('[DOM Render] List item indented.');
-        this.editor.editorEl.focus(); // Ensure editor retains focus
+
+        const parentList = listItemElement.parentNode;
+        if (!parentList || (parentList.tagName !== 'UL' && parentList.tagName !== 'OL')) {
+            return; // Not a valid list structure
+        }
+
+        const previousListItem = listItemElement.previousElementSibling;
+
+        if (previousListItem && previousListItem.tagName === 'LI') {
+            // We can indent: move listItemElement into a sublist of previousListItem
+            let subList = previousListItem.querySelector('ul, ol');
+
+            if (!subList) {
+                // Previous LI doesn't have a sublist, create one
+                subList = document.createElement(parentList.tagName); // UL or OL, same as parent
+                previousListItem.appendChild(subList);
+            }
+
+            // Move the current listItemElement into the subList
+            subList.appendChild(listItemElement);
+            console.log('[DOM Render] List item indented.');
+
+            // Set caret at the beginning of the (now indented) listItemElement's text
+            try {
+                const sel = window.getSelection();
+                const rng = document.createRange();
+                let firstTextNode = null;
+                
+                // Find the first text node in the listItemElement, or create one if empty
+                if (listItemElement.firstChild && listItemElement.firstChild.nodeType === Node.TEXT_NODE) {
+                    firstTextNode = listItemElement.firstChild;
+                } else if (listItemElement.firstChild && listItemElement.firstChild.childNodes.length > 0 && listItemElement.firstChild.childNodes[0].nodeType === Node.TEXT_NODE) {
+                    // Handles cases where content might be wrapped, e.g. by browser
+                    firstTextNode = listItemElement.firstChild.childNodes[0];
+                } else { // LI is empty or has no initial text node (e.g. just <br>)
+                    // Clear content and add an empty text node for caret
+                    listItemElement.innerHTML = ''; // Clear any <br> etc.
+                    firstTextNode = document.createTextNode('');
+                    listItemElement.appendChild(firstTextNode);
+                }
+
+                rng.setStart(firstTextNode, 0);
+                rng.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(rng);
+            } catch (e) {
+                listItemElement.focus(); // Fallback
+            }
+            
+            // Notify editor that DOM changed and caret needs to be updated for display/saving
+            // The editor's keydown handler already calls updateCaretDisplayAndSave after listManager calls.
+            // However, if listManager itself needs to trigger a save or full caret recalculation:
+            // this.editor.applyFocusAndSave(this.editor.getAbsoluteCaretPosition(), true);
+            // For now, the existing updateCaretDisplayAndSave in editor.js keydown should suffice.
+
+        } else {
+            // Cannot indent: it's the first item in its list, or previous sibling isn't an LI.
+            // console.log('[Log] listManager: Cannot indent further.');
+        }
     },
 
     handleShiftTab(listItemElement) {
         if (!this.editor || !listItemElement) return;
         // console.log('[Log] listManager: handleShiftTab called for LI:', listItemElement.textContent.substring(0,20));
-        // TODO: Implement outdentation logic
-        // If DOM is changed: console.log('[DOM Render] List item outdented/transformed.');
-        this.editor.editorEl.focus(); // Ensure editor retains focus
+        // No DOM change, no focus change. True no-op for now.
+        // If DOM is changed in future: console.log('[DOM Render] List item outdented/transformed.');
     }
 };
 

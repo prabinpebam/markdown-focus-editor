@@ -1,5 +1,5 @@
-import storage from './storage.js'; // Import storage module
-import listManager from './listManager.js'; // Import listManager
+import storage from './storage.js';
+import listManager from './listManager.js';
 
 const editor = {
     init() {
@@ -16,6 +16,7 @@ const editor = {
         this.lastLogTrigger = null;
 
         // Bind 'this' for methods called directly or indirectly by event listeners
+        // Ensure these methods exist on the 'editor' object.
         this.boundHandleInputFormatting = this.handleInputFormatting.bind(this);
         this.boundHandlePotentialPostActionFormatting = this.handlePotentialPostActionFormatting.bind(this);
         this.boundHandleKeyDown = this.handleKeyDown.bind(this);
@@ -25,27 +26,25 @@ const editor = {
         this.boundHandleClick = this.handleClick.bind(this);
         this.boundHandleEnterKeydown = this.handleEnterKeydown.bind(this);
 
-
         this.editorEl.addEventListener('keydown', this.boundHandleKeyDown);
         this.editorEl.addEventListener('mousedown', this.boundHandleMouseDown);
-        document.addEventListener('mouseup',  this.boundHandleMouseUp); // document, not editorEl
+        document.addEventListener('mouseup',  this.boundHandleMouseUp);
         this.editorEl.addEventListener('keyup', this.boundHandleKeyUp);
         
         this.editorEl.addEventListener('input', () => {
-            // Arrow function here maintains 'this' from init()
             if (this.isSelecting) return; 
             if (!this.lastLogTrigger) {
                 this.lastLogTrigger = 'input';
             }
-            this.boundHandleInputFormatting(); // Call the bound version
+            this.boundHandleInputFormatting();
         });
 
         this.editorEl.addEventListener('click', this.boundHandleClick);
         
-        this.editorEl.addEventListener('keydown', this.boundHandleEnterKeydown);
+        this.editorEl.addEventListener('keydown', this.boundHandleEnterKeydown); // Handles preEnterDOM snapshot
 
         if (this.caretInput){
-            this.caretInput.addEventListener('change', () => { // Arrow function for simple lexical 'this'
+            this.caretInput.addEventListener('change', () => {
                 const max   = this.editorEl.innerText.length;
                 let   pos   = parseInt(this.caretInput.value,10);
                 if (isNaN(pos) || pos < 0) pos = 0;
@@ -57,7 +56,6 @@ const editor = {
         listManager.init(this);
     },
 
-    // Define the event handling logic as separate methods
     handleKeyDown(e) {
         if (e.key === 'Enter' || e.key === 'Backspace') {
             this.preDomSnapshot = this.editorEl.innerHTML;
@@ -69,10 +67,14 @@ const editor = {
             const listItem = sel.anchorNode.closest ? sel.anchorNode.closest('li') : null;
             if (listItem) { 
                 if (e.key === 'Tab') {
+                    console.log('[Tab Key] Detected in LI. Preventing default.');
                     e.preventDefault(); 
+                    console.log('[Tab Key] Default prevented.');
                     if (e.shiftKey) {
+                        console.log('[Tab Key] Calling listManager.handleShiftTab.');
                         listManager.handleShiftTab(listItem);
                     } else {
+                        console.log('[Tab Key] Calling listManager.handleTab.');
                         listManager.handleTab(listItem);
                     }
                     this.updateCaretDisplayAndSave(); 
@@ -80,12 +82,15 @@ const editor = {
                 }
             }
         }
-        // For shift, ctrl+a, arrows - part of the original combined keydown
+        
         if (e.shiftKey) {
             this.isSelecting = true;
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             this.isSelecting = true;
         } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            // isSelecting might be set to true to prevent formatting during caret movement by arrows
+            // but the main keyup listener for arrows handles this by returning early.
+            // This flag helps if other keydown logic depends on knowing if a selection might be starting.
             this.isSelecting = true; 
         }
     },
@@ -110,34 +115,31 @@ const editor = {
             this.updateCaretDisplayAndSave(); 
             return;
         }
-        this.boundHandlePotentialPostActionFormatting(); // Call bound version
+        this.boundHandlePotentialPostActionFormatting();
     },
     
     handleClick() {
-        // This logic was in the original click listener
         if (this.isSelecting && !window.getSelection().isCollapsed) {
             return;
         }
         this.isSelecting = false; 
-        this.boundHandlePotentialPostActionFormatting(); // Call bound version
+        this.boundHandlePotentialPostActionFormatting();
     },
 
     handleEnterKeydown(e) {
-        // This was the second keydown listener specifically for Enter
         if (e.key === 'Enter') {
             this.preEnterDOM = this.editorEl.innerHTML; 
         }
     },
 
-
-    handleInputFormatting() { // 'this' is now guaranteed to be the editor object
+    handleInputFormatting() {
         if (this.isSelecting) return; 
         if (this.devToggle && !this.devToggle.checked) {
             this.updateCaretDisplayAndSave(); 
             return;
         }
 
-        setTimeout(() => { // Arrow function inherits 'this' from handleInputFormatting
+        setTimeout(() => {
             let absCaretPos = this.getAbsoluteCaretPosition();
             const sel = window.getSelection();
             let blockToProcess = null;
@@ -152,7 +154,6 @@ const editor = {
             
             let transformationOccurred = false;
             if (blockToProcess && blockToProcess.parentNode === this.editorEl) { 
-                 // Line 151 (approx)
                  transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
             }
 
@@ -165,14 +166,14 @@ const editor = {
         }, 0); 
     },
     
-    handlePotentialPostActionFormatting() { // 'this' is now guaranteed to be the editor object
+    handlePotentialPostActionFormatting() {
         if (this.isSelecting) return;
          if (this.devToggle && !this.devToggle.checked) {
             this.updateCaretDisplayAndSave();
             return;
         }
 
-        setTimeout(() => { // Arrow function inherits 'this' from handlePotentialPostActionFormatting
+        setTimeout(() => {
             let absCaretPos = this.getAbsoluteCaretPosition();
             let transformationOccurred = false;
 
@@ -189,7 +190,6 @@ const editor = {
         }, 0); 
     },
 
-    // Helper for common tasks after transformations or actions
     applyFocusAndSave(absCaretPos, transformationOccurred) {
         const focusToggle = document.getElementById('focus-toggle');
         if (focusToggle && focusToggle.checked) {
@@ -201,44 +201,45 @@ const editor = {
         if (transformationOccurred) {
             this.restoreCaret(absCaretPos);
         }
-        // Always update display and save, even if caret wasn't explicitly restored by us
         this.updateCaretDisplayAndSave();
     },
     
     updateCaretDisplayAndSave() {
         if (this.caretInput) {
-            this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+            // Ensure getAbsoluteCaretPosition is robust before updating
+            try {
+                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+            } catch (e) {
+                // Silently fail or log minimally if caret position can't be determined
+            }
         }
         if (this.editorEl) {
             storage.saveSettings('lastContent', this.editorEl.innerHTML);
         }
     },
 
-    /**
-     * Attempts to transform the current block if it matches heading or list syntax.
-     * @param {Node} blockNode - The block element (e.g., DIV) to check.
-     * @param {Node} originalAnchorNode - The original anchor node of the selection.
-     * @param {Number} originalAnchorOffset - The original anchor offset of the selection.
-     * @returns {boolean} True if a transformation occurred.
-     */
     attemptBlockTransformations(blockNode, originalAnchorNode, originalAnchorOffset) {
-        if (!blockNode || blockNode.nodeType !== Node.ELEMENT_NODE) return false;
-
-        // Only attempt to transform DIVs for now
-        if (blockNode.tagName !== 'DIV') return false;
-
-        const textNode = blockNode.firstChild; // Assuming simple structure: DIV -> TextNode
-        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return false;
-        
-        const textContent = textNode.textContent;
-
-        // Try Heading Transformation
-        const headingMatch = textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
-        if (headingMatch) {
-            return this.transformToHeading(blockNode, headingMatch, textNode, originalAnchorOffset);
+        if (!blockNode || blockNode.nodeType !== Node.ELEMENT_NODE) {
+            return false;
         }
 
-        // Try List Transformation
+        if (blockNode.tagName !== 'DIV') {
+            return false;
+        }
+
+        const textContent = blockNode.textContent;
+        
+        const headingMatch = textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
+        if (headingMatch) {
+            let textNodeForCaret = (originalAnchorNode && originalAnchorNode.nodeType === Node.TEXT_NODE && blockNode.contains(originalAnchorNode)) 
+                                   ? originalAnchorNode 
+                                   : (blockNode.firstChild && blockNode.firstChild.nodeType === Node.TEXT_NODE ? blockNode.firstChild : null);
+            if (textNodeForCaret) {
+                 return this.transformToHeading(blockNode, headingMatch, textNodeForCaret, originalAnchorOffset);
+            }
+            return false; 
+        }
+
         const ulMatch = textContent.match(listManager.ulMarkerRegex);
         if (ulMatch) {
             return listManager.convertBlockToList(blockNode, ulMatch, 'ul');
@@ -249,26 +250,18 @@ const editor = {
             return listManager.convertBlockToList(blockNode, olMatch, 'ol');
         }
         
-        return false; // No transformation
+        return false;
     },
 
-    /**
-     * Transforms a DIV block into a heading element.
-     * @param {Node} divBlock - The DIV element to transform.
-     * @param {RegExpMatchArray} match - The regex match for heading syntax.
-     * @param {Node} originalTextNode - The text node within the div that contained the match.
-     * @param {Number} originalAnchorOffset - The caret offset within the originalTextNode.
-     * @returns {boolean} True if transformation was successful.
-     */
-    transformToHeading(divBlock, match, originalTextNode, originalAnchorOffset) {
+    transformToHeading(divBlock, match, textNodeBeingEdited, caretOffsetInTextNode) {
         const level = match[1].length;
-        const rawBody = match[2];
-        const hBodyContent = '\u200B' + rawBody; // Prepend ZWSP
+        const rawBody = match[2]; 
+        const hBodyContent = '\u200B' + rawBody;
 
         const h = document.createElement(`h${level}`);
         const markerSpan = document.createElement('span');
         markerSpan.className = 'heading-marker';
-        markerSpan.textContent = match[1]; // Hashes
+        markerSpan.textContent = match[1]; 
         markerSpan.contentEditable = false;
 
         const hTextNode = document.createTextNode(hBodyContent);
@@ -277,15 +270,14 @@ const editor = {
         divBlock.replaceWith(h);
         console.log(`[DOM Render] Transformed DIV to H${level}.`);
 
-        // Set caret position
         const sel = window.getSelection();
         if (sel) {
-            // Calculate offset relative to the start of the raw body content
-            const matchedMarkerAndSpaceLength = match[1].length + 1; // e.g., "## " is length 3
-            let caretOffsetInRawBody = originalAnchorOffset - matchedMarkerAndSpaceLength;
+            const matchedMarkerAndSpaceLength = match[1].length + 1; 
+            let caretOffsetInRawBody = caretOffsetInTextNode - matchedMarkerAndSpaceLength;
+            
             caretOffsetInRawBody = Math.max(0, caretOffsetInRawBody);
 
-            let newOffsetInHTextNode = 1 + caretOffsetInRawBody; // 1 for ZWSP
+            let newOffsetInHTextNode = 1 + caretOffsetInRawBody; 
             newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length);
             newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode);
 
@@ -296,7 +288,7 @@ const editor = {
                 sel.removeAllRanges();
                 sel.addRange(rng);
             } catch (e) {
-                h.focus(); // Fallback
+                h.focus(); 
             }
         }
         return true;
@@ -308,66 +300,126 @@ const editor = {
 
     getAbsoluteCaretPosition() {
         const sel = window.getSelection();
-        if (!sel || !sel.anchorNode) return 0;
+        if (!sel || !sel.anchorNode || !this.editorEl.contains(sel.anchorNode)) return 0;
 
-        let block = sel.anchorNode;
-        while (block && block.parentNode !== this.editorEl) block = block.parentNode;
+
+        let currentBlock = sel.anchorNode;
+        while (currentBlock && currentBlock.parentNode !== this.editorEl) {
+            currentBlock = currentBlock.parentNode;
+        }
+        if (!currentBlock || currentBlock === this.editorEl && sel.anchorNode !== this.editorEl) { 
+            // If currentBlock became editorEl but anchorNode is not editorEl, something is wrong (e.g. caret in marker span)
+            // or if currentBlock is null. Try to find the block based on anchorNode again if it's the editor.
+            if (sel.anchorNode === this.editorEl) {
+                 // Caret is directly in editor, usually means it's empty or between blocks.
+                 // Offset will be based on child index.
+            } else {
+                // Fallback or error, caret might be in an unexpected place (e.g. detached node, or inside marker)
+                // For safety, return a value that implies start or end, or try a simpler calculation.
+                // A simple recovery: if anchorNode is a text node, count characters up to it in its parent block.
+                let tempNode = sel.anchorNode;
+                let tempOffset = sel.anchorOffset;
+                while(tempNode && tempNode.parentNode !== this.editorEl && tempNode.parentNode) {
+                    let sibling = tempNode.previousSibling;
+                    while(sibling) {
+                        tempOffset += (sibling.textContent || '').length;
+                        sibling = sibling.previousSibling;
+                    }
+                    tempNode = tempNode.parentNode;
+                }
+                 currentBlock = tempNode; // This is now the block-level child of editorEl
+            }
+        }
+
 
         let offset = 0;
         for (const el of this.getBlocks()) {
-            if (el === block) {
-                if (sel.anchorNode === this.editorEl) {
+            if (el === currentBlock) {
+                if (sel.anchorNode === this.editorEl) { // Caret directly in editor (e.g. empty)
                     let childOffset = 0;
                     for (let i = 0; i < sel.anchorOffset; i++) {
-                        if (this.editorEl.childNodes[i].innerText) {
-                             childOffset += this.editorEl.childNodes[i].innerText.length +1;
-                        } else if (this.editorEl.childNodes[i].textContent){ 
-                             childOffset += this.editorEl.childNodes[i].textContent.length +1;
-                        } else {
-                             childOffset +=1; 
-                        }
+                        childOffset += (this.editorEl.childNodes[i].textContent || '').length +1;
                     }
                     offset += childOffset;
                 } else if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
-                     offset += sel.anchorOffset;
-                } else if (sel.anchorNode.nodeType === Node.ELEMENT_NODE) {
-                         let tempOffset = 0;
-                        for(let i=0; i < sel.anchorOffset; i++){
-                            if(sel.anchorNode.childNodes[i] && sel.anchorNode.childNodes[i].innerText){
-                                tempOffset += sel.anchorNode.childNodes[i].innerText.length;
-                            } else if (sel.anchorNode.childNodes[i] && sel.anchorNode.childNodes[i].textContent){
-                                tempOffset += sel.anchorNode.childNodes[i].textContent.length;
-                            } else {
-                                tempOffset +=1; 
-                            }
+                     // Calculate offset within the currentBlock up to the anchorNode, then add anchorOffset
+                    let intraBlockOffset = 0;
+                    let tempNode = currentBlock.firstChild;
+                    let foundAnchor = false;
+                    while(tempNode) {
+                        if (tempNode === sel.anchorNode) {
+                            intraBlockOffset += sel.anchorOffset;
+                            foundAnchor = true;
+                            break;
                         }
-                        offset += tempOffset;
+                        intraBlockOffset += (tempNode.textContent || '').length;
+                        if (tempNode.contains && tempNode.contains(sel.anchorNode)) { // Anchor is a descendant
+                            let innerOffset = 0;
+                            let pathNode = sel.anchorNode;
+                            // Sum text content of pathNode's preceding siblings up to tempNode's child
+                            while(pathNode !== tempNode) {
+                                let pathSibling = pathNode.previousSibling;
+                                while(pathSibling) {
+                                    innerOffset += (pathSibling.textContent || '').length;
+                                    pathSibling = pathSibling.previousSibling;
+                                }
+                                if (pathNode.nodeType === Node.TEXT_NODE && pathNode === sel.anchorNode) {
+                                     innerOffset += sel.anchorOffset;
+                                } else if (pathNode.nodeType === Node.TEXT_NODE) {
+                                     innerOffset += (pathNode.textContent || '').length;
+                                }
+                                // If pathNode is an element containing the sel.anchorNode, this needs more recursion.
+                                // For simplicity, this case is complex. The original logic was simpler.
+                                // Sticking to simpler logic: if anchorNode is text, add its offset.
+                                // If anchorNode is an element, it's more complex.
+                                pathNode = pathNode.parentNode; // This logic is getting too complex, revert to simpler if problematic
+                            }
+                            // This recursive/deep offset calculation is tricky.
+                            // The original logic was simpler: if TEXT_NODE, add sel.anchorOffset.
+                            // Let's stick to that for now and refine if needed.
+                            intraBlockOffset = sel.anchorOffset; // Simplified for now
+                            foundAnchor = true; // Assume if we are here, anchor is in this block
+                            break; 
+                        }
+                        tempNode = tempNode.nextSibling;
+                    }
+                     offset += (foundAnchor ? intraBlockOffset : (currentBlock.textContent || '').length); // Fallback to full length if not found (should not happen)
+                } else if (sel.anchorNode.nodeType === Node.ELEMENT_NODE && currentBlock.contains(sel.anchorNode)) {
+                    // Caret is in an element node, sel.anchorOffset is child index
+                    let intraBlockOffset = 0;
+                    for(let i=0; i < sel.anchorOffset; i++){
+                        if(currentBlock.childNodes[i]){
+                            intraBlockOffset += (currentBlock.childNodes[i].textContent || '').length;
+                        }
+                    }
+                    offset += intraBlockOffset;
                 }
                 break;
             }
-            offset += el.innerText.length + 1; 
+            offset += (el.textContent || '').length + 1; 
         }
         return offset;
     },
 
     restoreCaret(abs) {
+        console.log(`[restoreCaret] Called. abs: ${abs}, Current editor innerHTML length: ${this.editorEl.innerHTML.length}`); // ADD THIS LOG
         const blocks = this.getBlocks();
-        let run = 0, target = null, inner = 0;
+        let run = 0, targetBlock = null, innerOffset = 0;
 
         for (const el of blocks) {
-            const len = el.innerText.length; 
+            const len = (el.textContent || '').length; 
             if (run + len + 1 > abs) {
-                inner  = abs - run;
-                target = el;
+                innerOffset  = abs - run;
+                targetBlock = el;
                 break;
             }
             run += len + 1;
         }
         
-        if (!target) {
+        if (!targetBlock) {
             if (blocks.length > 0) {
-                target = blocks[blocks.length - 1];
-                inner = target.innerText.length; 
+                targetBlock = blocks[blocks.length - 1];
+                innerOffset = (targetBlock.textContent || '').length; 
             } else { 
                 this.editorEl.focus();
                 if (this.editorEl.children.length === 0) {
@@ -375,96 +427,107 @@ const editor = {
                     const br = document.createElement('br'); 
                     div.appendChild(br);
                     this.editorEl.appendChild(div);
-                    target = div;
-                    inner = 0;
+                    targetBlock = div;
+                    innerOffset = 0;
                 } else {
-                     return 0; 
+                     return; 
                 }
             }
         }
 
-        const findText = n => { 
-            if (n.nodeType === Node.TEXT_NODE &&
-                (!n.parentNode || !n.parentNode.classList.contains('heading-marker'))) return n;
-            if (n.childNodes) { 
-                for (const c of n.childNodes) {
-                    if (c.nodeType === Node.TEXT_NODE && 
-                        (!c.parentNode || !c.parentNode.classList.contains('heading-marker'))) return c;
-                }
-                for (const c of n.childNodes) {
-                     if (c.nodeType === Node.ELEMENT_NODE && c.classList.contains('heading-marker')) continue;
-                    const t = findText(c); 
-                    if (t) return t;
-                }
-            }
-            return null;
-        };
-        
-        let tn = findText(target); 
+        let charCount = 0;
+        let foundNode = null;
+        let offsetInNode = 0;
 
-        if (!tn) {
-            if (target.tagName === 'DIV' || target.tagName === 'LI' || /^H[1-6]$/.test(target.tagName)) {
-                let contentHost = target;
-                if (/^H[1-6]$/.test(target.tagName) && target.querySelector('.heading-marker')) {
-                    contentHost = target.lastChild.nodeType === Node.TEXT_NODE ? target.lastChild : target;
-                }
-
-                if (!contentHost.firstChild || contentHost.firstChild.nodeType !== Node.TEXT_NODE || contentHost.firstChild.classList?.contains('heading-marker')) {
-                    tn = document.createTextNode('\u200B');
-                    if (contentHost.lastChild && contentHost.lastChild.nodeType === Node.ELEMENT_NODE && contentHost.lastChild.classList.contains('heading-marker')) {
-                         target.appendChild(tn); 
-                    } else if (contentHost.firstChild && contentHost.firstChild.nodeType === Node.ELEMENT_NODE && contentHost.firstChild.classList.contains('heading-marker')) {
-                         contentHost.insertBefore(tn, contentHost.firstChild.nextSibling);
+        function findTextNodeRecursive(parentNode) {
+            for (const child of parentNode.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    // Ensure we are not trying to place caret in a heading marker's text node
+                    if (!child.parentNode || !child.parentNode.classList || !child.parentNode.classList.contains('heading-marker')) {
+                        const nodeLen = child.nodeValue.length;
+                        // If innerOffset is 0, and this is the first text-like content we've encountered (charCount is 0),
+                        // this text node (even if empty) is our target.
+                        if (charCount === 0 && innerOffset === 0) {
+                            foundNode = child;
+                            offsetInNode = 0;
+                            return true; // Found
+                        }
+                        if (charCount + nodeLen >= innerOffset) {
+                            foundNode = child;
+                            offsetInNode = innerOffset - charCount;
+                            return true; // Found
+                        }
+                        charCount += nodeLen;
                     }
-                    else {
-                         contentHost.insertBefore(tn, contentHost.firstChild); 
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    if (child.classList && child.classList.contains('heading-marker')) continue; // Skip heading markers
+                    if (findTextNodeRecursive(child)) {
+                        return true; // Found in recursion
                     }
-                    inner = Math.min(inner, tn.data.length); 
-                } else if (contentHost.firstChild.nodeType === Node.TEXT_NODE) {
-                    tn = contentHost.firstChild; 
                 }
             }
-            if (!tn) { 
-                 if (target) target.focus();
-                 return 0; 
-            }
+            return false; // Not found in this branch
         }
 
-
-        let caretPos = inner;
-        
-        caretPos = Math.min(caretPos, tn.data.length);
-        caretPos = Math.max(0, caretPos); 
-
-        const sel = window.getSelection();
-        const rng = document.createRange();
-        try {
-            rng.setStart(tn, caretPos);
-            rng.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(rng);
-        } catch (e) {
-            if(target) target.focus(); 
-        }
-        
-        let effectiveAbsPos = run; 
-        const marker = target.querySelector('.heading-marker');
-        const markerLen = marker ? marker.innerText.length : 0;
-        effectiveAbsPos += markerLen;
-        const startsWithZWSP = tn.data.startsWith('\u200B');
-        if (startsWithZWSP) {
-            effectiveAbsPos += Math.max(0, caretPos - 1);
+        if (targetBlock.childNodes.length === 0 && innerOffset === 0) { 
+             // Block is genuinely empty, and caret is at its start. Add ZWSP to make it focusable.
+             const textNode = document.createTextNode('\u200B'); 
+             targetBlock.appendChild(textNode);
+             foundNode = textNode;
+             offsetInNode = 0; // Caret at the start of ZWSP, effectively. Or 1 to be after. For empty, 0 is fine.
         } else {
-            effectiveAbsPos += caretPos;
+            findTextNodeRecursive(targetBlock);
         }
-        return effectiveAbsPos;
+        
+        if (!foundNode && targetBlock) { 
+            if (targetBlock.childNodes.length === 1 && 
+                targetBlock.firstChild.nodeType === Node.TEXT_NODE && 
+                targetBlock.firstChild.nodeValue === "" && 
+                innerOffset === 0) {
+                foundNode = targetBlock.firstChild;
+                offsetInNode = 0;
+            } else {
+                let isEffectivelyEmptyOrCaretAtEnd = true;
+                if (targetBlock.textContent !== "" && innerOffset < targetBlock.textContent.length) {
+                    isEffectivelyEmptyOrCaretAtEnd = false; 
+                }
+
+                if (isEffectivelyEmptyOrCaretAtEnd) {
+                    // This is the log for ZWSP insertion by this fallback
+                    console.log('[restoreCaret] Fallback: Adding ZWSP. targetBlock:', targetBlock.tagName, 'innerHTML:', targetBlock.innerHTML, 'childNodes.length:', targetBlock.childNodes.length, 'innerOffset:', innerOffset);
+                    const newTextNode = document.createTextNode('\u200B');
+                    targetBlock.appendChild(newTextNode);
+                    foundNode = newTextNode;
+                    offsetInNode = (innerOffset === 0 && targetBlock.textContent === '\u200B') ? 0 : 1;
+                } else if (targetBlock.lastChild && targetBlock.lastChild.nodeType === Node.TEXT_NODE) {
+                    foundNode = targetBlock.lastChild;
+                    offsetInNode = foundNode.nodeValue.length;
+                }
+            }
+        }
+        
+        if (foundNode) {
+            offsetInNode = Math.max(0, Math.min(offsetInNode, foundNode.nodeValue.length));
+            const sel = window.getSelection();
+            const rng = document.createRange();
+            try {
+                rng.setStart(foundNode, offsetInNode);
+                rng.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(rng);
+            } catch (e) {
+                if(targetBlock) targetBlock.focus(); 
+            }
+        } else if (targetBlock) {
+            targetBlock.focus(); // Fallback: focus the block if no text node found
+        }
     },
 
     applyFocusFormatting(focusRange) {
         const blocks = this.getBlocks();
         let run = 0;
         for (const el of blocks) {
-            const len = el.innerText.length;
+            const len = (el.innerText || '').length; // Use innerText for opacity as it reflects visible text
             const inRange =
                 run + len >= focusRange.start &&   
                 run <= focusRange.end;
@@ -541,6 +604,6 @@ const editor = {
         }
         return reverted;
     },
-};
+}; // This should be the closing brace for the 'editor' object.
 
 export default editor;

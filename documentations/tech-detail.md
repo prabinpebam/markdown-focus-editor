@@ -9,25 +9,35 @@ Markdown-Focus-Editor
 
 
 # IMPORTANT: Render pipeline
-On every key press and mouse click
-- Let browser do its default edit behavior for contenteditable elements
-- Preserve the DOM in the conteneditable tag that gets created.
-- Detect and store current caret position considering the current DOM
-- Use the DOM and use regex to detect various formatting sections.
-  - Header sections:
-    - Real-time detection using syntax identifiers: `# `, `## `, etc. (matches regular space, non-breaking space, zero-width space, en space, em space, and thin space after hashes).
-  - List sections
-  - Focus mode sections
-  - Text style sections
-- Split all sections using spans within the preserved structure of the DOM
-- Apply correct formatting by assigning the appropriate CSS classes
-- Update the preserved DOM with the new added spans and formatting classes.
-- Preserve caret position
+The editor primarily leverages the browser's native `contenteditable` behavior for most user interactions (typing, caret movement, basic deletions). Custom JavaScript intervenes to re-render or transform parts of the DOM only in specific, targeted scenarios:
+
+- **Initial Content Load/File Open:**
+  - When content is first loaded (e.g., from local storage or a file), a one-time processing pass may occur to ensure structural integrity (e.g., presence of non-editable heading markers).
+
+- **Runtime DOM Transformations (Triggered by User Input):**
+  - **Heading Creation:** When Markdown heading syntax (e.g., `# `, `## `) is typed at the start of a plain block (e.g., a `<div>`), the block is converted to the corresponding `<hX>` element. This includes inserting a non-editable `<span class="heading-marker">`. The caret is then programmatically placed.
+  - **Heading Reversion:** If a heading's structural integrity is compromised (e.g., the ZWSP after the marker is deleted), the `<hX>` element is reverted to a `<div>`. The caret is programmatically placed.
+  - **List Creation:** When Markdown list syntax (e.g., `- `, `1. `) is typed at the start of a plain block, the block is converted into a `<ul><li>...</li></ul>` or `<ol><li>...</li></ol>` structure. The caret is programmatically placed.
+  - **List Indentation/Outdentation (Tab/Shift+Tab):** When `Tab` or `Shift+Tab` is pressed within an `<li>` element:
+    - The default browser action is prevented.
+    - Custom logic restructures the DOM to create/remove nesting levels for the list item.
+    - The caret is programmatically placed after the DOM change.
+
+- **No Full Re-renders for Minor Edits:**
+  - Standard typing within existing paragraphs, headings, or list items does not trigger a full re-parse or re-render of the editor's content by custom JavaScript.
+  - Browser default behavior handles Enter key presses for creating new list items or splitting blocks, and Backspace for deletions, unless these actions trigger a specific reversion rule (like breaking a heading).
+
+- **Caret Management:**
+  - For most operations, the browser manages caret position.
+  - Custom caret calculation (`getAbsoluteCaretPosition`) and restoration (`restoreCaret`) are invoked *only after* a custom DOM transformation has occurred to ensure the caret is correctly placed within the newly modified structure.
+
+- **Non-Destructive Formatting (e.g., Focus Mode):**
+  - Features like Focus Mode apply styling (e.g., opacity changes) without altering the HTML structure. These are typically updated after caret movements or content changes but do not involve the DOM transformation pipeline described above.
 
 ## Leverage browser edit behavior
-- Account for click drag selection
-- Account for double click, tripple click selection
-- Account for ctrl + z functionality.
+- Account for click drag selection.
+- Account for double click, triple click selection.
+- Account for Ctrl+Z (undo/redo) functionality – custom DOM transformations should integrate with the browser's undo stack.
 
 # Formats
 ## Basic Text Styles
@@ -71,11 +81,10 @@ H6: 1.0x base font, bold weight, 0.6x margin-top
 ## List item UX
 - List items should have proper list formatting.
 - When text overflow in a sentence, the new line text is aligned properly with the start of the previous line.
-- Pressing enter creats a new list item automatically. For OL, numbers are calculated and added automatically.
-- Pressing tab while the cursor is anywhere on a list item automatically indents the list to create nested list. For ordered lists, the count starts from the beginning for every nested group.
-- For OL, the count for the overall list is recalculated every time there's a change in the list structure.
-  - There should be continuous count for list items at the same level of the nesting. Having sub items in the list structure doens't break this count.
-  - The count of a nested item ends only when the next item after the nested item goes above the level of the nested item.
+- Pressing enter creates a new list item automatically (primarily browser default). For OL, numbers are calculated and added automatically by the browser.
+- Pressing tab while the cursor is anywhere on a list item automatically indents the list to create a nested list (custom handling). For ordered lists, the count starts from the beginning for every nested group.
+- Pressing shift+tab while the cursor is anywhere on a list item automatically outdents the list item (custom handling).
+- For OL, the count for the overall list is recalculated every time there's a change in the list structure (primarily browser default, custom updates if needed after indent/outdent).
 
 ## UL/OL
 We need to support the ul and ol.
@@ -153,20 +162,15 @@ We need to handle
 - Principle is to leverage browser default behavior and write only code if the default behavior is undesired or is not meeting our requirements.
 
 ## Algorithm
-- Detect ul and ol syntax marker using regex (Similar to how it done for heading marker)
-- Transition div to ul/ol if list marker is matched
-- Tab key in a list item creates a nested ul/ol list
-- shift+tab key
-  - brings a list item up by one level in the nesting.
-
+- Detect ul and ol syntax marker using regex (Similar to how it's done for heading marker) when typed in a plain block.
+- Transition `div` to `ul/ol` if list marker is matched (one-time DOM render).
+- Tab key in a list item creates a nested `ul/ol` list (custom DOM render).
+- Shift+tab key in a list item brings it up by one level or converts it (custom DOM render).
+- Enter and Backspace within lists primarily rely on browser default behavior.
 
 # shift+tab key handling
 
-DOM render pipeline should be suspended by default.
-There were code to suspend DOM render on specific conditions, we can remove them.
-DOM is rendered using the existing logic only when heading match happens with the existing heading match algorithm. Even here it's a one time thing. Once the transition form div to hx has happened, there's no need to re render the DOM.
-
-Similarly DOM is rendered only the first time an list item syntax match happens. Just one time transition from the div element to ul/ol li structure happens. After that the brwser default behavior is what I need, for everything including enter and backspace. Don't render DOM again for enter and backspace.
+DOM is rendered only the first time an list item syntax match happens. Just one time transition from the div element to ul/ol li structure happens. After that the brwser default behavior is what I need, for everything including enter and backspace. Don't render DOM again for enter and backspace.
 - for tab key press when already in a li item, the li item will be turned into a full ul/ol>li structure to nest the list. DOM should be re-remdered to update this change just one time.
 - for shift+tab key press when on a li item, there are a few cases
    - li is at the top level nesting and it's the first/last item and it's the only item in the list
