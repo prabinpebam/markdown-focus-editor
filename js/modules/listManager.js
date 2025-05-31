@@ -50,70 +50,97 @@ const listManager = {
     },
 
     handleTab(listItemElement) {
-        if (!this.editor || !listItemElement) return;
+        if (!this.editor || !listItemElement) {
+            console.log('[handleTab] Aborted: No editor or listItemElement.');
+            return;
+        }
+        console.log('[handleTab] Processing LI: "' + listItemElement.textContent.trim().substring(0, 50) + '..."');
 
         const parentList = listItemElement.parentNode;
         if (!parentList || (parentList.tagName !== 'UL' && parentList.tagName !== 'OL')) {
+            console.log('[handleTab] Aborted: listItemElement has no valid UL/OL parentList. Parent:', parentList);
             return; 
         }
+        console.log('[handleTab] ParentList is:', parentList.tagName);
 
-        const previousListItem = listItemElement.previousElementSibling;
+        const previousSibling = listItemElement.previousElementSibling;
+        if (previousSibling) {
+            console.log('[handleTab] Found previousElementSibling: <' + previousSibling.tagName + '> "' + previousSibling.textContent.trim().substring(0, 50) + '..."');
+        } else {
+            console.log('[handleTab] No previousElementSibling found for LI: "' + listItemElement.textContent.trim().substring(0, 50) + '..."');
+        }
 
-        if (previousListItem && previousListItem.tagName === 'LI') {
-            let subList = previousListItem.querySelector(':scope > ul, :scope > ol'); 
+        let indented = false;
 
-            if (!subList) {
+        if (previousSibling && previousSibling.tagName === 'LI') {
+            // Case 1: Previous sibling is an LI. Indent under it.
+            console.log('[handleTab] Case 1: Previous sibling is an LI. Attempting to indent under it.');
+            let subList = previousSibling.querySelector(':scope > ul, :scope > ol'); 
+            
+            if (subList) {
+                console.log('[handleTab] Found existing subList in previousLI: <' + subList.tagName + '>');
+            } else {
+                console.log('[handleTab] No existing subList in previousLI. Creating new one: <' + parentList.tagName + '>');
                 subList = document.createElement(parentList.tagName); 
-                previousListItem.appendChild(subList);
+                previousSibling.appendChild(subList);
+                console.log('[handleTab] New subList created and appended to previousLI.');
             }
-
+            
+            console.log('[handleTab] Attempting to move LI: "' + listItemElement.textContent.trim().substring(0,50) + 
+                        '" into subList of LI: "' + previousSibling.textContent.trim().substring(0,50) + '"');
             subList.appendChild(listItemElement);
-            console.log('[DOM Render] List item indented.');
+            indented = true;
+            
+        } else if (previousSibling && (previousSibling.tagName === 'UL' || previousSibling.tagName === 'OL')) {
+            // Case 2: Previous sibling is a UL or OL. Move current LI into it.
+            console.log('[handleTab] Case 2: Previous sibling is a List (' + previousSibling.tagName + '). Attempting to move LI into it.');
+            const targetList = previousSibling;
+            targetList.appendChild(listItemElement);
+            indented = true;
+        } else {
+            console.log('[handleTab] No valid previous LI sibling or sibling List found. Cannot indent this item using current logic.');
+        }
 
+        if (indented) {
+            console.log('[DOM Render] List item indented. Moved LI successfully.');
             // Defer caret placement to allow DOM to settle
             setTimeout(() => {
                 const sel = window.getSelection();
-                if (!sel) return; 
+                if (!sel) {
+                    console.error('[handleTab setTimeout] Aborted: No selection object.');
+                    return; 
+                }
                 const rng = document.createRange();
+                console.log('[handleTab setTimeout] Setting caret for LI: "' + listItemElement.textContent.trim().substring(0,50) + '"');
 
                 try {
-                    // 1. Ensure the element that was moved is focused.
-                    listItemElement.focus();
+                    let targetNodeForCaret = listItemElement.firstChild;
 
-                    // 2. Set the selection to the start of the listItemElement.
-                    // The browser will find the first valid position.
-                    rng.setStart(listItemElement, 0); // Offset 0 means before the first child.
+                    if (!targetNodeForCaret || targetNodeForCaret.nodeType !== Node.TEXT_NODE) {
+                        console.log('[handleTab setTimeout] First child not a text node or null. Ensuring text node exists.');
+                        const newTextNode = document.createTextNode('');
+                        if (targetNodeForCaret) { 
+                            listItemElement.insertBefore(newTextNode, targetNodeForCaret);
+                        } else { 
+                            listItemElement.appendChild(newTextNode);
+                        }
+                        targetNodeForCaret = newTextNode;
+                        console.log('[handleTab setTimeout] Created/prepended new text node for caret.');
+                    }
+                    
+                    rng.setStart(targetNodeForCaret, 0);
                     rng.collapse(true);
-
                     sel.removeAllRanges();
                     sel.addRange(rng);
-
-                    // Log the state AFTER setting the caret
-                    console.log('[handleTab Caret POST-SET] sel.anchorNode:', sel.anchorNode, 'Offset:', sel.anchorOffset);
-                    if (sel.anchorNode) {
-                        const parentOfAnchor = sel.anchorNode.parentNode;
-                        console.log('[handleTab Caret POST-SET] sel.anchorNode.parentNode:', parentOfAnchor);
-                        if (parentOfAnchor && parentOfAnchor.closest) {
-                            console.log('[handleTab Caret POST-SET] sel.anchorNode.parentNode.closest("li"):', parentOfAnchor.closest('li'));
-                        }
-                        // Also check closest on anchorNode itself if it's an element
-                        if (sel.anchorNode.closest) {
-                             console.log('[handleTab Caret POST-SET] sel.anchorNode.closest("li"):', sel.anchorNode.closest('li'));
-                        }
-                    }
-
-
+                    console.log('[handleTab setTimeout] Caret set in node:', targetNodeForCaret, 'at offset 0. Node parent:', targetNodeForCaret.parentNode ? targetNodeForCaret.parentNode.tagName : 'null');
+                    
                 } catch (e) {
-                    console.error("Error setting caret in handleTab (setTimeout):", e);
-                    // Fallback: ensure the element still tries to get focus.
+                    console.error("[handleTab setTimeout] Error setting caret:", e, "Attempting focus on LI.");
                     listItemElement.focus();
                 }
             }, 0); 
-            
-        } else {
-            // Cannot indent further this way.
-        }
-    },
+        } // This closes the 'if (indented)' block
+    }, // This closes the 'handleTab' method
 
     handleShiftTab(listItemElement) {
         if (!this.editor || !listItemElement) return;
@@ -121,6 +148,6 @@ const listManager = {
         // No DOM change, no focus change. True no-op for now.
         // If DOM is changed in future: console.log('[DOM Render] List item outdented/transformed.');
     }
-};
+}; // This closes the 'listManager' object
 
 export default listManager;
