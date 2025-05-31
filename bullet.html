@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Markdown Editor</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+  <!-- Google Font Default -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style/main.css">
+</head>
+<body>
+  <button id="hamburger">☰</button>
+
+  <!-- DEV-MODE toggle (top-right) -->
+  <label id="dev-switch" class="switch" title="Dev Mode">
+      <input type="checkbox" id="dev-toggle" checked>
+      <span class="slider"></span>
+  </label>
+  <!-- NEW absolute-caret field (0-999) -->
+  <input id="caret-pos" type="number" min="0" max="999"
+         value="0" maxlength="3" title="Caret index"
+         style="width:60px; margin-left:8px;">
+
+  <div id="toolbar">
+    <button id="save" title="Save (Ctrl+S)"><img src="images/save.svg" alt="Save"></button>
+    <button id="open-file" title="Open"><img src="images/open.svg" alt="Open"></button>
+    <button id="increase-font" title="Increase Font Size"><img src="images/increase-font.svg" alt="Increase Font"></button>
+    <button id="decrease-font" title="Decrease Font Size"><img src="images/decrease-font.svg" alt="Decrease Font"></button>
+    <button id="toggle-theme" title="Toggle Light/Dark Theme"><img src="images/dark-theme.svg" alt="Toggle Theme"></button>
+    <button id="fullscreen" title="Toggle Fullscreen"><img src="images/fullscreen.svg" alt="Fullscreen"></button>    
+    <span class="separator"></span>
+    <label class="switch" title="Focus">
+        <input type="checkbox" id="focus-toggle" checked>
+        <span class="slider"></span>
+    </label>
+    <input type="file" id="file-input" accept=".txt,.md" style="display:none;">
+  </div>
+
+  <div id="editor" contenteditable="true" spellcheck="false">
+    <div>Welcome to Markdown-Focus-Editor: Your distraction-free markdown playground. Fire up your keyboard and let witty words turn into magic!</div>
+    <ul>
+      <li>List item lvl 1</li>      
+      <li>List item lvl 2</li>
+        <ul>
+          <li>List item lvl 2.1</li>
+          <li>List item lvl 2.2</li>
+            <ul>
+              <li>List item lvl 2.2.1</li>
+              <li>List item lvl 2.2.2</li>
+            </ul>
+        </ul>
+      <li>List item lvl 3</li>
+    </ul>
+
+    <ol>
+      <li>Chapter 1
+        <ol>
+          <li>Section 1.1</li>
+          <li>Section 1.2</li>
+        </ol>
+      </li>
+      <li>Chapter 2</li>
+    </ol>
+
+
+    <ol type="a">
+      <li>Chapter 1
+        <ol>
+          <li>Section 1.1</li>
+          <li>Section 1.2</li>
+        </ol>
+      </li>
+      <li>Chapter 2</li>
+    </ol>
+
+  </div>
+
+  <div id="font-modal">
+    <div class="content">
+      <h3>Select Font</h3>
+      <div id="font-list"></div>
+      <button id="close-font-modal">Close</button>
+    </div>
+  </div>
+
+  <!-- Main application -->
+  
+</body>
+</html>

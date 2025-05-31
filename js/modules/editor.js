@@ -1,180 +1,311 @@
 import storage from './storage.js'; // Import storage module
+import listManager from './listManager.js'; // Import listManager
 
 const editor = {
     init() {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
-        this.editorEl.focus();                     // focus on page-load
+        
+        this.editorEl.focus();
 
-        this.caretInput = document.getElementById('caret-pos'); // ← NEW
-        this.devToggle = document.getElementById('dev-toggle');   // ← NEW
-        this.isSelecting = false;                          // ← NEW FLAG
+        this.caretInput = document.getElementById('caret-pos');
+        this.devToggle = document.getElementById('dev-toggle');
+        this.isSelecting = false;
 
-        /* ── DOM-snapshot triggers ─────────────────────────────────────── */
-        this.preDomSnapshot = null;                              // single snapshot store
-        this.lastLogTrigger = null;                              // To store 'Enter', 'Backspace', or 'click'
+        this.preDomSnapshot = null;
+        this.lastLogTrigger = null;
 
-        // Enter key or Backspace → snapshot before browser default action
-        this.editorEl.addEventListener('keydown', e => {
-            if (e.key === 'Enter' || e.key === 'Backspace') {
-                this.preDomSnapshot = this.editorEl.innerHTML;
-                this.lastLogTrigger = e.key; // Store the key that triggered the log
-            }
-        });
+        // Bind 'this' for methods called directly or indirectly by event listeners
+        this.boundHandleInputFormatting = this.handleInputFormatting.bind(this);
+        this.boundHandlePotentialPostActionFormatting = this.handlePotentialPostActionFormatting.bind(this);
+        this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+        this.boundHandleMouseDown = this.handleMouseDown.bind(this);
+        this.boundHandleMouseUp = this.handleMouseUp.bind(this);
+        this.boundHandleKeyUp = this.handleKeyUp.bind(this);
+        this.boundHandleClick = this.handleClick.bind(this);
+        this.boundHandleEnterKeydown = this.handleEnterKeydown.bind(this);
 
-        // Mouse click → snapshot at mousedown (before caret moves)
-        this.editorEl.addEventListener('mousedown', () => {
-            this.preDomSnapshot = this.editorEl.innerHTML;
-            this.lastLogTrigger = 'click'; // Store 'click' as the trigger
-        });
 
-        // --- selection tracking (mouse) ---
-        this.editorEl.addEventListener('mousedown', () =>  this.isSelecting = true);
-        document.addEventListener('mouseup',  () => {      // outside releases, too
-            if (window.getSelection().isCollapsed) this.isSelecting = false;
-        });
-
-        // --- selection tracking (keyboard: Shift + arrows etc.) ---
-        this.editorEl.addEventListener('keydown',  e => {
-            if (e.shiftKey) this.isSelecting = true;
-        });
-        this.editorEl.addEventListener('keyup',    () => {
-            if (window.getSelection().isCollapsed) this.isSelecting = false;
-        });
-
-        // editor change events
+        this.editorEl.addEventListener('keydown', this.boundHandleKeyDown);
+        this.editorEl.addEventListener('mousedown', this.boundHandleMouseDown);
+        document.addEventListener('mouseup',  this.boundHandleMouseUp); // document, not editorEl
+        this.editorEl.addEventListener('keyup', this.boundHandleKeyUp);
+        
         this.editorEl.addEventListener('input', () => {
-            if (!this.lastLogTrigger) { // Set if not already set by a more specific event like keydown
+            // Arrow function here maintains 'this' from init()
+            if (this.isSelecting) return; 
+            if (!this.lastLogTrigger) {
                 this.lastLogTrigger = 'input';
             }
-            this.formatContent();
-        });
-        this.editorEl.addEventListener('click', () => {
-            // Click also triggers mousedown which sets lastLogTrigger.
-            // If we want click to be distinct for formatContent:
-            // this.lastLogTrigger = 'click_format'; // Or just let mousedown's 'click' be used.
-            this.formatContent();
-        });
-        this.editorEl.addEventListener('keyup', (e) => { // Add 'e' parameter to access event details
-            // Prevent formatting if only an arrow key was pressed (without Shift)
-            // as 'isSelecting' would have been set to false by the other keyup listener.
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
-                // If it was just an arrow key for caret movement,
-                // the other keyup listener has already set isSelecting = false.
-                return; 
-            }
-
-            // Keyup might follow a keydown that set lastLogTrigger.
-            // If not (e.g. some special keys, or if keydown didn't set it),
-            // we could set a generic 'keyup' trigger.
-            // However, 'input' event is generally preferred for content changes.
-            if (!this.lastLogTrigger && ! (event.key === 'Enter' || event.key === 'Backspace')) {
-                 // Avoid overwriting specific triggers if keyup is for Enter/Backspace
-                 // and preDomSnapshot was taken.
-            }
-            this.formatContent();
+            this.boundHandleInputFormatting(); // Call the bound version
         });
 
-        /* ── Enter logging ───────────────────────────────────────────── */
-        // This preEnterDOM seems redundant if preDomSnapshot handles Enter,
-        // but we'll leave it as per current structure unless asked to remove.
-        this.preEnterDOM = null; 
-        this.editorEl.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                this.preEnterDOM = this.editorEl.innerHTML; // snapshot before browser change
-                // If Enter also needs to be logged specifically via this, ensure lastLogTrigger is set
-                // this.lastLogTrigger = e.key; // This would overwrite if Enter is handled by both listeners
-            }
-        });
+        this.editorEl.addEventListener('click', this.boundHandleClick);
+        
+        this.editorEl.addEventListener('keydown', this.boundHandleEnterKeydown);
 
-        /* ── caret-field change → move caret ─────────────────────────── */
         if (this.caretInput){
-            this.caretInput.addEventListener('change', () => {
+            this.caretInput.addEventListener('change', () => { // Arrow function for simple lexical 'this'
                 const max   = this.editorEl.innerText.length;
                 let   pos   = parseInt(this.caretInput.value,10);
                 if (isNaN(pos) || pos < 0) pos = 0;
                 if (pos > max) pos = max;
                 this.caretInput.value = pos;
-                this.restoreCaret(pos);            // jump caret
+                this.restoreCaret(pos);
             });
+        }
+        listManager.init(this);
+    },
+
+    // Define the event handling logic as separate methods
+    handleKeyDown(e) {
+        if (e.key === 'Enter' || e.key === 'Backspace') {
+            this.preDomSnapshot = this.editorEl.innerHTML;
+            this.lastLogTrigger = e.key;
+        }
+
+        const sel = window.getSelection();
+        if (sel && sel.anchorNode) {
+            const listItem = sel.anchorNode.closest ? sel.anchorNode.closest('li') : null;
+            if (listItem) { 
+                if (e.key === 'Tab') {
+                    e.preventDefault(); 
+                    if (e.shiftKey) {
+                        listManager.handleShiftTab(listItem);
+                    } else {
+                        listManager.handleTab(listItem);
+                    }
+                    this.updateCaretDisplayAndSave(); 
+                    return; 
+                }
+            }
+        }
+        // For shift, ctrl+a, arrows - part of the original combined keydown
+        if (e.shiftKey) {
+            this.isSelecting = true;
+        } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+            this.isSelecting = true;
+        } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            this.isSelecting = true; 
         }
     },
 
-    formatContent() {
-        if (this.isSelecting) return;
-        if (this.devToggle && !this.devToggle.checked) return;
-        // console.log('[Log] formatContent triggered.'); // Reduced verbosity, can be re-enabled if needed
-        setTimeout(() => {
+    handleMouseDown() {
+        this.preDomSnapshot = this.editorEl.innerHTML;
+        this.lastLogTrigger = 'click';
+        this.isSelecting = true; 
+    },
+
+    handleMouseUp() {
+        if (window.getSelection().isCollapsed) {
+            this.isSelecting = false;
+        }
+    },
+
+    handleKeyUp(e) {
+        if (window.getSelection().isCollapsed) {
+            this.isSelecting = false;
+        }
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
+            this.updateCaretDisplayAndSave(); 
+            return;
+        }
+        this.boundHandlePotentialPostActionFormatting(); // Call bound version
+    },
+    
+    handleClick() {
+        // This logic was in the original click listener
+        if (this.isSelecting && !window.getSelection().isCollapsed) {
+            return;
+        }
+        this.isSelecting = false; 
+        this.boundHandlePotentialPostActionFormatting(); // Call bound version
+    },
+
+    handleEnterKeydown(e) {
+        // This was the second keydown listener specifically for Enter
+        if (e.key === 'Enter') {
+            this.preEnterDOM = this.editorEl.innerHTML; 
+        }
+    },
+
+
+    handleInputFormatting() { // 'this' is now guaranteed to be the editor object
+        if (this.isSelecting) return; 
+        if (this.devToggle && !this.devToggle.checked) {
+            this.updateCaretDisplayAndSave(); 
+            return;
+        }
+
+        setTimeout(() => { // Arrow function inherits 'this' from handleInputFormatting
             let absCaretPos = this.getAbsoluteCaretPosition();
-            const triggerType = this.lastLogTrigger || 'unknown_event'; // More specific default
-
-            if (this.preDomSnapshot) {
-                const visiblePreSnapshot = this.preDomSnapshot.replace(/\u200B/g, '[ZWSP]');
-                console.log(`[Log] DOM BEFORE (Trigger: ${triggerType}) [Caret @ ${absCaretPos}]:`, visiblePreSnapshot);
-            } else {
-                // Only log this if it's a trigger type that *should* have had a preDomSnapshot, or for general insight
-                // if (triggerType === 'Enter' || triggerType === 'Backspace' || triggerType === 'click') {
-                //    console.warn(`[Log] formatContent (Trigger: ${triggerType}) [Caret @ ${absCaretPos}] - Expected preDomSnapshot, but it was null.`);
-                // } else {
-                //    console.log(`[Log] formatContent (Trigger: ${triggerType}) [Caret @ ${absCaretPos}] - No preDomSnapshot (expected for this trigger type).`);
-                // }
-            }
-
-            // Store selection details before potential DOM modification by processNode
             const sel = window.getSelection();
-            const originalAnchorNode = sel.anchorNode;
-            const originalAnchorOffset = sel.anchorOffset;
+            let blockToProcess = null;
 
-            const transformedByProcessNode = this.processNode(this.editorEl, originalAnchorNode, originalAnchorOffset);
-
-            if (transformedByProcessNode) {
-                // If processNode transformed and set the caret, update absCaretPos
-                // as the DOM structure and caret position might have changed.
-                absCaretPos = this.getAbsoluteCaretPosition();
-            }
-
-            const headingReverted = this.revertBrokenHeading();
-
-            if (headingReverted) {
-                // revertBrokenHeading also sets the caret, so update absCaretPos.
-                const newCaretPosAfterRevert = this.getAbsoluteCaretPosition();
-                // console.log(`[Log] Heading reverted. Caret moved from ${absCaretPos} to ${newCaretPosAfterRevert}.`); // Optional: if more detail needed
-                absCaretPos = newCaretPosAfterRevert; // Update absCaretPos to the position set by revertBrokenHeading
-            }
-
-            const focusToggle = document.getElementById('focus-toggle');
-            if (focusToggle && focusToggle.checked) {
-                const text = this.editorEl.innerText;
-                const focusRange = this.calculateFocusRange(text, absCaretPos);
-                this.applyFocusFormatting(focusRange);
-            }
-
-            if (this.preDomSnapshot) {
-                const visiblePostSnapshot = this.editorEl.innerHTML.replace(/\u200B/g, '[ZWSP]');
-                console.log(`[Log] DOM AFTER (Trigger: ${triggerType}) [Caret will be restored to ${absCaretPos}, currently @ ${this.getAbsoluteCaretPosition()}]:`,
-                            visiblePostSnapshot);
-                this.preDomSnapshot = null;
-            }
-            this.lastLogTrigger = null; // Reset after use
-
-            this.restoreCaret(absCaretPos);
-            if (this.caretInput) {
-                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+            if (sel && sel.anchorNode) {
+                blockToProcess = sel.anchorNode;
+                while (blockToProcess && blockToProcess.parentNode !== this.editorEl) {
+                    blockToProcess = blockToProcess.parentNode;
+                }
+                if (blockToProcess === this.editorEl) blockToProcess = sel.anchorNode.childNodes[sel.anchorOffset] || sel.anchorNode.lastChild;
             }
             
-            // Save content to local storage immediately after all processing
-            if (this.editorEl) {
-                storage.saveSettings('lastContent', this.editorEl.innerHTML);
+            let transformationOccurred = false;
+            if (blockToProcess && blockToProcess.parentNode === this.editorEl) { 
+                 // Line 151 (approx)
+                 transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
             }
-            // console.log('[Log] formatContent finished.'); // Reduced verbosity
-        }, 10);
+
+            if (transformationOccurred) {
+                absCaretPos = this.getAbsoluteCaretPosition(); 
+            }
+            
+            this.applyFocusAndSave(absCaretPos, transformationOccurred); 
+            this.lastLogTrigger = null;
+        }, 0); 
     },
-    /* util: all top-level blocks (div, h1-h6 …) */
-    getBlocks() {
-        return Array.from(this.editorEl.children); // direct children only
+    
+    handlePotentialPostActionFormatting() { // 'this' is now guaranteed to be the editor object
+        if (this.isSelecting) return;
+         if (this.devToggle && !this.devToggle.checked) {
+            this.updateCaretDisplayAndSave();
+            return;
+        }
+
+        setTimeout(() => { // Arrow function inherits 'this' from handlePotentialPostActionFormatting
+            let absCaretPos = this.getAbsoluteCaretPosition();
+            let transformationOccurred = false;
+
+            const headingReverted = this.revertBrokenHeading();
+            if (headingReverted) {
+                absCaretPos = this.getAbsoluteCaretPosition();
+                transformationOccurred = true;
+            }
+            
+            this.applyFocusAndSave(absCaretPos, transformationOccurred); 
+
+            this.preDomSnapshot = null;
+            this.lastLogTrigger = null;
+        }, 0); 
     },
 
-    /* absolute caret index – just rely on innerText (includes “# ”) */
+    // Helper for common tasks after transformations or actions
+    applyFocusAndSave(absCaretPos, transformationOccurred) {
+        const focusToggle = document.getElementById('focus-toggle');
+        if (focusToggle && focusToggle.checked) {
+            const text = this.editorEl.innerText;
+            const focusRange = this.calculateFocusRange(text, absCaretPos);
+            this.applyFocusFormatting(focusRange);
+        }
+        
+        if (transformationOccurred) {
+            this.restoreCaret(absCaretPos);
+        }
+        // Always update display and save, even if caret wasn't explicitly restored by us
+        this.updateCaretDisplayAndSave();
+    },
+    
+    updateCaretDisplayAndSave() {
+        if (this.caretInput) {
+            this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+        }
+        if (this.editorEl) {
+            storage.saveSettings('lastContent', this.editorEl.innerHTML);
+        }
+    },
+
+    /**
+     * Attempts to transform the current block if it matches heading or list syntax.
+     * @param {Node} blockNode - The block element (e.g., DIV) to check.
+     * @param {Node} originalAnchorNode - The original anchor node of the selection.
+     * @param {Number} originalAnchorOffset - The original anchor offset of the selection.
+     * @returns {boolean} True if a transformation occurred.
+     */
+    attemptBlockTransformations(blockNode, originalAnchorNode, originalAnchorOffset) {
+        if (!blockNode || blockNode.nodeType !== Node.ELEMENT_NODE) return false;
+
+        // Only attempt to transform DIVs for now
+        if (blockNode.tagName !== 'DIV') return false;
+
+        const textNode = blockNode.firstChild; // Assuming simple structure: DIV -> TextNode
+        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return false;
+        
+        const textContent = textNode.textContent;
+
+        // Try Heading Transformation
+        const headingMatch = textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
+        if (headingMatch) {
+            return this.transformToHeading(blockNode, headingMatch, textNode, originalAnchorOffset);
+        }
+
+        // Try List Transformation
+        const ulMatch = textContent.match(listManager.ulMarkerRegex);
+        if (ulMatch) {
+            return listManager.convertBlockToList(blockNode, ulMatch, 'ul');
+        }
+
+        const olMatch = textContent.match(listManager.olMarkerRegex);
+        if (olMatch) {
+            return listManager.convertBlockToList(blockNode, olMatch, 'ol');
+        }
+        
+        return false; // No transformation
+    },
+
+    /**
+     * Transforms a DIV block into a heading element.
+     * @param {Node} divBlock - The DIV element to transform.
+     * @param {RegExpMatchArray} match - The regex match for heading syntax.
+     * @param {Node} originalTextNode - The text node within the div that contained the match.
+     * @param {Number} originalAnchorOffset - The caret offset within the originalTextNode.
+     * @returns {boolean} True if transformation was successful.
+     */
+    transformToHeading(divBlock, match, originalTextNode, originalAnchorOffset) {
+        const level = match[1].length;
+        const rawBody = match[2];
+        const hBodyContent = '\u200B' + rawBody; // Prepend ZWSP
+
+        const h = document.createElement(`h${level}`);
+        const markerSpan = document.createElement('span');
+        markerSpan.className = 'heading-marker';
+        markerSpan.textContent = match[1]; // Hashes
+        markerSpan.contentEditable = false;
+
+        const hTextNode = document.createTextNode(hBodyContent);
+        h.append(markerSpan, hTextNode);
+
+        divBlock.replaceWith(h);
+        console.log(`[DOM Render] Transformed DIV to H${level}.`);
+
+        // Set caret position
+        const sel = window.getSelection();
+        if (sel) {
+            // Calculate offset relative to the start of the raw body content
+            const matchedMarkerAndSpaceLength = match[1].length + 1; // e.g., "## " is length 3
+            let caretOffsetInRawBody = originalAnchorOffset - matchedMarkerAndSpaceLength;
+            caretOffsetInRawBody = Math.max(0, caretOffsetInRawBody);
+
+            let newOffsetInHTextNode = 1 + caretOffsetInRawBody; // 1 for ZWSP
+            newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length);
+            newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode);
+
+            try {
+                const rng = document.createRange();
+                rng.setStart(hTextNode, newOffsetInHTextNode);
+                rng.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(rng);
+            } catch (e) {
+                h.focus(); // Fallback
+            }
+        }
+        return true;
+    },
+    
+    getBlocks() {
+        return Array.from(this.editorEl.children); 
+    },
+
     getAbsoluteCaretPosition() {
         const sel = window.getSelection();
         if (!sel || !sel.anchorNode) return 0;
@@ -185,23 +316,47 @@ const editor = {
         let offset = 0;
         for (const el of this.getBlocks()) {
             if (el === block) {
-                if (sel.anchorNode.nodeType === Node.TEXT_NODE) offset += sel.anchorOffset;
+                if (sel.anchorNode === this.editorEl) {
+                    let childOffset = 0;
+                    for (let i = 0; i < sel.anchorOffset; i++) {
+                        if (this.editorEl.childNodes[i].innerText) {
+                             childOffset += this.editorEl.childNodes[i].innerText.length +1;
+                        } else if (this.editorEl.childNodes[i].textContent){ 
+                             childOffset += this.editorEl.childNodes[i].textContent.length +1;
+                        } else {
+                             childOffset +=1; 
+                        }
+                    }
+                    offset += childOffset;
+                } else if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
+                     offset += sel.anchorOffset;
+                } else if (sel.anchorNode.nodeType === Node.ELEMENT_NODE) {
+                         let tempOffset = 0;
+                        for(let i=0; i < sel.anchorOffset; i++){
+                            if(sel.anchorNode.childNodes[i] && sel.anchorNode.childNodes[i].innerText){
+                                tempOffset += sel.anchorNode.childNodes[i].innerText.length;
+                            } else if (sel.anchorNode.childNodes[i] && sel.anchorNode.childNodes[i].textContent){
+                                tempOffset += sel.anchorNode.childNodes[i].textContent.length;
+                            } else {
+                                tempOffset +=1; 
+                            }
+                        }
+                        offset += tempOffset;
+                }
                 break;
             }
-            offset += el.innerText.length + 1; // newline after each block
+            offset += el.innerText.length + 1; 
         }
         return offset;
     },
 
-    /* restore caret – lands after the marker span */
     restoreCaret(abs) {
         const blocks = this.getBlocks();
         let run = 0, target = null, inner = 0;
 
         for (const el of blocks) {
-            // Use innerText for block length calculation to be consistent with getAbsoluteCaretPosition
             const len = el.innerText.length; 
-            if (run + len + 1 > abs) {              // caret belongs here
+            if (run + len + 1 > abs) {
                 inner  = abs - run;
                 target = el;
                 break;
@@ -215,38 +370,69 @@ const editor = {
                 inner = target.innerText.length; 
             } else { 
                 this.editorEl.focus();
-                return 0; 
+                if (this.editorEl.children.length === 0) {
+                    const div = document.createElement('div');
+                    const br = document.createElement('br'); 
+                    div.appendChild(br);
+                    this.editorEl.appendChild(div);
+                    target = div;
+                    inner = 0;
+                } else {
+                     return 0; 
+                }
             }
         }
-
-        // 'inner' is now sel.anchorOffset within the content text node of the 'target' block.
-        // For example, if target is <h2><span class="marker">##</span>\u200BText</h2>,
-        // and caret was at \u200BTe|xt, then inner would be 3.
 
         const findText = n => { 
             if (n.nodeType === Node.TEXT_NODE &&
                 (!n.parentNode || !n.parentNode.classList.contains('heading-marker'))) return n;
             if (n.childNodes) { 
                 for (const c of n.childNodes) {
-                    const t = findText(c);
+                    if (c.nodeType === Node.TEXT_NODE && 
+                        (!c.parentNode || !c.parentNode.classList.contains('heading-marker'))) return c;
+                }
+                for (const c of n.childNodes) {
+                     if (c.nodeType === Node.ELEMENT_NODE && c.classList.contains('heading-marker')) continue;
+                    const t = findText(c); 
                     if (t) return t;
                 }
             }
             return null;
         };
+        
+        let tn = findText(target); 
 
-        const tn = findText(target); 
         if (!tn) {
-            if (target) target.focus();
-            return 0;
+            if (target.tagName === 'DIV' || target.tagName === 'LI' || /^H[1-6]$/.test(target.tagName)) {
+                let contentHost = target;
+                if (/^H[1-6]$/.test(target.tagName) && target.querySelector('.heading-marker')) {
+                    contentHost = target.lastChild.nodeType === Node.TEXT_NODE ? target.lastChild : target;
+                }
+
+                if (!contentHost.firstChild || contentHost.firstChild.nodeType !== Node.TEXT_NODE || contentHost.firstChild.classList?.contains('heading-marker')) {
+                    tn = document.createTextNode('\u200B');
+                    if (contentHost.lastChild && contentHost.lastChild.nodeType === Node.ELEMENT_NODE && contentHost.lastChild.classList.contains('heading-marker')) {
+                         target.appendChild(tn); 
+                    } else if (contentHost.firstChild && contentHost.firstChild.nodeType === Node.ELEMENT_NODE && contentHost.firstChild.classList.contains('heading-marker')) {
+                         contentHost.insertBefore(tn, contentHost.firstChild.nextSibling);
+                    }
+                    else {
+                         contentHost.insertBefore(tn, contentHost.firstChild); 
+                    }
+                    inner = Math.min(inner, tn.data.length); 
+                } else if (contentHost.firstChild.nodeType === Node.TEXT_NODE) {
+                    tn = contentHost.firstChild; 
+                }
+            }
+            if (!tn) { 
+                 if (target) target.focus();
+                 return 0; 
+            }
         }
 
-        // 'inner' is the desired offset within the text node 'tn'.
-        // No complex mapping with markerLen or caretLocal is needed here if 'inner'
-        // directly comes from sel.anchorOffset of the content text node.
+
         let caretPos = inner;
         
-        // Ensure caretPos is within the bounds of the text node's data.
         caretPos = Math.min(caretPos, tn.data.length);
         caretPos = Math.max(0, caretPos); 
 
@@ -258,18 +444,13 @@ const editor = {
             sel.removeAllRanges();
             sel.addRange(rng);
         } catch (e) {
-            console.error("Error setting caret in restoreCaret:", e, {tnData: tn.data, caretPos, inner, abs});
-            if(target) target.focus(); // Fallback
+            if(target) target.focus(); 
         }
         
-        // Calculate the effective absolute position for return.
-        // This part is for informational return value, not critical for the fix itself.
-        let effectiveAbsPos = run; // Length of preceding blocks
+        let effectiveAbsPos = run; 
         const marker = target.querySelector('.heading-marker');
         const markerLen = marker ? marker.innerText.length : 0;
-        // Add marker length (from innerText)
         effectiveAbsPos += markerLen;
-        // Add caret position within the visible part of the content text node
         const startsWithZWSP = tn.data.startsWith('\u200B');
         if (startsWithZWSP) {
             effectiveAbsPos += Math.max(0, caretPos - 1);
@@ -279,126 +460,16 @@ const editor = {
         return effectiveAbsPos;
     },
 
-    /* header detection – replaces paragraph <div> with semantic <hX>  */
-    processNode(node, originalAnchorNode, originalAnchorOffset) { // Pass original selection
-        if (node.nodeType === Node.TEXT_NODE) {
-            const textContentForLog = node.textContent
-                .replace(/\u200B/g, '[ZWSP]')
-                .replace(/\u00A0/g, '[NBSP]')
-                .replace(/\u2002/g, '[ENSP]')
-                .replace(/\u2003/g, '[EMSP]')
-                .replace(/\u2009/g, '[THSP]');
-            if (
-                !node.textContent.trim() ||
-                /^h[1-6]$/i.test(node.parentNode.tagName) ||
-                node.parentNode.classList.contains('heading-marker')
-            ) {
-                // Optional: Log why it was skipped if node.textContent starts with #
-                // if (node.textContent.startsWith('#')) {
-                //     console.log(`[Log] processNode: Skipped processing for potential heading "${textContentForLog}" due to guard conditions.`);
-                // }
-                return;
-            }
-
-            // Match "#" followed by: regular space, ZWSP, NBSP, ENSP, EMSP, or THSP
-            const m = node.textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
-            if (m) {
-                console.log(`[Log] processNode: Matched heading syntax in textContent: "${textContentForLog}"`);
-                /* locate the top-level block (<div>) that holds the text node */
-                let block = node.parentNode;
-                while (block && block.parentNode !== this.editorEl) block = block.parentNode;
-                if (!block || block === this.editorEl) return false; // Ensure it's a child block, not the editor itself
-
-                const level   = m[1].length;
-                const rawBody = m[2];              // may be empty
-                const hBodyContent = '\u200B' + rawBody; // Prepend ZWSP
-
-                const h       = document.createElement(`h${level}`);
-                const marker  = document.createElement('span');
-                marker.className = 'heading-marker';
-                marker.textContent = m[1];             // only the hashes
-                marker.contentEditable = false; // Make the marker non-editable
-
-                const hTextNode = document.createTextNode(hBodyContent);
-                h.append(marker, hTextNode);
-                
-                const selectionWasInBlock = block.contains(originalAnchorNode);
-
-                block.replaceWith(h);
-                console.log(`[Log] processNode: Replaced <div> with <h${level}>.`);
-
-                // Set caret position carefully in the new heading
-                const currentSel = window.getSelection();
-                if (currentSel && selectionWasInBlock && originalAnchorNode === node) {
-                    // Caret was in the specific text node that got transformed
-                    const matchedMarkerAndSpaceLength = m[1].length + 1; // e.g., "## " is length 3
-                    
-                    // Calculate offset relative to the start of the raw body content
-                    let caretOffsetInRawBody = originalAnchorOffset - matchedMarkerAndSpaceLength;
-                    caretOffsetInRawBody = Math.max(0, caretOffsetInRawBody); // Ensure non-negative
-
-                    // New offset in hTextNode is 1 (for ZWSP) + offset in rawBody
-                    let newOffsetInHTextNode = 1 + caretOffsetInRawBody;
-                    
-                    // Ensure newOffset is within the bounds of the new text node's length
-                    newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length);
-                    // Ensure it's at least 0 (should be at least 1 due to ZWSP if hTextNode.data.length > 0)
-                    newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode); 
-
-
-                    try {
-                        const rng = document.createRange();
-                        rng.setStart(hTextNode, newOffsetInHTextNode);
-                        rng.collapse(true);
-                        currentSel.removeAllRanges();
-                        currentSel.addRange(rng);
-                        // console.log(`[Log] processNode: Caret set in new H node at offset ${newOffsetInHTextNode} (in "${hTextNode.data.replace(/\u200B/g, '[ZWSP]')}")`);
-                    } catch (e) {
-                        console.error("[Log] processNode: Error setting caret in new H node", e, { textNodeData: hTextNode.data, offset: newOffsetInHTextNode });
-                        h.focus(); // Fallback focus
-                    }
-                } else if (currentSel && selectionWasInBlock) {
-                    // Caret was in the block, but not the specific text node, or originalAnchorNode is no longer relevant.
-                    // Default to placing caret at the beginning of the user-editable text in the new heading (after ZWSP).
-                    try {
-                        const rng = document.createRange();
-                        // Ensure hTextNode has content, place after ZWSP (offset 1) or at 0 if empty (should not happen due to ZWSP)
-                        const offset = hTextNode.data.length > 0 ? 1 : 0;
-                        rng.setStart(hTextNode, Math.min(offset, hTextNode.data.length));
-                        rng.collapse(true);
-                        currentSel.removeAllRanges();
-                        currentSel.addRange(rng);
-                        // console.log(`[Log] processNode: Caret set to default in new H node (offset ${Math.min(offset, hTextNode.data.length)})`);
-                    } catch (e) {
-                        console.error("[Log] processNode: Error setting default caret in new H node", e);
-                        h.focus(); // Fallback focus
-                    }
-                }
-                // If selection was not in the block, the browser should attempt to preserve it relative to other content.
-                
-                return true; // Indicate transformation occurred
-            } else if (node.textContent.match(/^\s*#{1,6}/)) { // Starts with optional spaces then #
-                console.log(`[Log] processNode: Potential heading prefix found but NO MATCH for full heading syntax: "${textContentForLog}"`);
-            }
-        } else if (node.nodeType === Node.ELEMENT_NODE) {
-            for (const child of Array.from(node.childNodes)) {
-                // Pass original selection info down for recursive calls
-                if (this.processNode(child, originalAnchorNode, originalAnchorOffset)) return true;
-            }
-        }
-        return false; // No transformation in this node or its children
-    },
-    // Focus-mode formatting – NON-destructive
     applyFocusFormatting(focusRange) {
         const blocks = this.getBlocks();
         let run = 0;
         for (const el of blocks) {
             const len = el.innerText.length;
             const inRange =
-                run + len >= focusRange.start &&   // overlaps focus range
+                run + len >= focusRange.start &&   
                 run <= focusRange.end;
             el.style.opacity = inRange ? '0.9' : '0.3';
-            run += len + 1;                        // +1 for virtual newline
+            run += len + 1;                        
         }
     },
 
@@ -428,7 +499,6 @@ const editor = {
         return { start, end };
     },
 
-    /* revert <hX> back to <div> if ZWSP was deleted with Backspace */
     revertBrokenHeading() {
         let reverted = false;
         for (const h of this.editorEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
@@ -441,34 +511,26 @@ const editor = {
             }
 
             const isTextNode = n && n.nodeType === Node.TEXT_NODE;
-            const currentTextContentForLog = isTextNode ? n.data.replace(/\u200B/g, '[ZWSP]') : (n ? n.tagName : 'null');
             const broken = !n ||
                            (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') ||
-                           (isTextNode && n.data.charCodeAt(0) !== 0x200B);
+                           (isTextNode && n.data.charCodeAt(0) !== 0x200B && n.data.length > 0) || 
+                           (isTextNode && n.data.length === 0 && h.childNodes.length <=1 ); 
 
             if (broken) {
-                console.log(`[Log] revertBrokenHeading: Detected broken heading <${h.tagName}>. Next sibling content: "${currentTextContentForLog}". Reverting to <div>.`);
-                // If original text node existed, get its data (strip leading ZWSP if it was there but somehow broken logic missed it)
                 const body = isTextNode ? n.data.replace(/^[\u200B]/, '') : '';
                 
                 const div = document.createElement('div');
-                // Content is just the hashes plus whatever body text remained. NO extra space added here.
-                // E.g., "#" or "#remainingText"
                 div.textContent = marker.textContent + body; 
                 h.replaceWith(div);
+                console.log(`[DOM Render] Reverted H${h.tagName.substring(1)} to DIV.`);
                 reverted = true;
-                const divContentForLog = div.textContent.replace(/\u200B/g, '[ZWSP]');
-                console.log(`[Log] revertBrokenHeading: Reverted to <div> with content: "${divContentForLog}". Caret set after marker.`);
 
-                const tn = div.firstChild; // Should be the text node we just created
+                const tn = div.firstChild; 
                 if (tn && tn.nodeType === Node.TEXT_NODE) {
                     const sel = window.getSelection();
                     const rng = document.createRange();
-                    // Set caret position to be immediately after the hash marks.
-                    // If user types a space next, it will become e.g. "# " which then triggers heading creation.
-                    // If user types a char, it will be e.g. "#char", not a heading.
                     let caretPosInDiv = marker.textContent.length;
-                    caretPosInDiv = Math.min(caretPosInDiv, tn.data.length); // Ensure within bounds
+                    caretPosInDiv = Math.min(caretPosInDiv, tn.data.length); 
 
                     rng.setStart(tn, caretPosInDiv); 
                     rng.collapse(true);
