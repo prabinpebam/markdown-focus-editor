@@ -62,35 +62,53 @@ const editor = {
             this.lastLogTrigger = e.key;
         }
 
-        const sel = window.getSelection();
-        if (sel && sel.anchorNode) {
-            const listItem = sel.anchorNode.closest ? sel.anchorNode.closest('li') : null;
-            if (listItem) { 
-                if (e.key === 'Tab') {
-                    console.log('[Tab Key] Detected in LI. Preventing default.');
-                    e.preventDefault(); 
-                    console.log('[Tab Key] Default prevented.');
-                    if (e.shiftKey) {
-                        console.log('[Tab Key] Calling listManager.handleShiftTab.');
-                        listManager.handleShiftTab(listItem);
-                    } else {
-                        console.log('[Tab Key] Calling listManager.handleTab.');
-                        listManager.handleTab(listItem);
+        if (e.key === 'Tab') {
+            // Check if the editor itself or one of its children has focus
+            if (this.editorEl.contains(document.activeElement)) {
+                console.log('[Tab Key Global] Editor focused. Preventing default.');
+                e.preventDefault();
+
+                const sel = window.getSelection();
+                if (sel && sel.anchorNode) {
+                    let listItem = null;
+                    // Correctly determine listItem based on anchorNode type
+                    if (sel.anchorNode.nodeType === Node.ELEMENT_NODE) {
+                        listItem = sel.anchorNode.closest('li');
+                    } else if (sel.anchorNode.parentNode && typeof sel.anchorNode.parentNode.closest === 'function') { 
+                        // For text nodes, etc., check parentNode.closest
+                        listItem = sel.anchorNode.parentNode.closest('li');
                     }
-                    this.updateCaretDisplayAndSave(); 
-                    return; 
+
+                    // Diagnostic logs
+                    console.log('[Tab Key Debug] sel.anchorNode:', sel.anchorNode, 'Type:', sel.anchorNode.nodeType, 'Name:', sel.anchorNode.nodeName);
+                    console.log('[Tab Key Debug] sel.anchorOffset:', sel.anchorOffset);
+                    console.log('[Tab Key Debug] sel.anchorNode.parentNode:', sel.anchorNode.parentNode);
+                    console.log('[Tab Key Debug] Determined listItem:', listItem);
+                    
+                    if (listItem) {
+                        console.log('[Tab Key] Context is LI.');
+                        if (e.shiftKey) {
+                            console.log('[Tab Key] Calling listManager.handleShiftTab.');
+                            listManager.handleShiftTab(listItem);
+                        } else {
+                            console.log('[Tab Key] Calling listManager.handleTab.');
+                            listManager.handleTab(listItem);
+                        }
+                        this.updateCaretDisplayAndSave(); 
+                    } else {
+                        console.log('[Tab Key] Context is NOT LI. Tab does nothing custom here (default prevented).');
+                    }
                 }
+                return; // Tab key has been handled (either by listManager or by doing nothing after preventDefault)
             }
         }
         
+        // For other keys (Shift, Ctrl+A, Arrows, etc.)
         if (e.shiftKey) {
             this.isSelecting = true;
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             this.isSelecting = true;
         } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            // isSelecting might be set to true to prevent formatting during caret movement by arrows
-            // but the main keyup listener for arrows handles this by returning early.
-            // This flag helps if other keydown logic depends on knowing if a selection might be starting.
             this.isSelecting = true; 
         }
     },
