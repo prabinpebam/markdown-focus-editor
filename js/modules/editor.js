@@ -62,44 +62,54 @@ const editor = {
             this.lastLogTrigger = e.key;
         }
 
-        if (e.key === 'Tab') {
-            // Check if the editor itself or one of its children has focus
-            if (this.editorEl.contains(document.activeElement)) {
+        const sel = window.getSelection();
+        if (sel && sel.anchorNode) {
+            let listItem = null; // Initialize listItem
+
+            if (e.key === 'Tab') {
                 console.log('[Tab Key Global] Editor focused. Preventing default.');
-                e.preventDefault();
+                console.log('[Tab Key Debug] sel.anchorNode:', sel.anchorNode, 'Type:', sel.anchorNode.nodeType, 'Name:', sel.anchorNode.nodeName);
+                console.log('[Tab Key Debug] sel.anchorOffset:', sel.anchorOffset);
+                const parentOfAnchor = sel.anchorNode.parentNode;
+                console.log('[Tab Key Debug] sel.anchorNode.parentNode:', parentOfAnchor);
+                
+                const closestLiCheck = sel.anchorNode.closest ? sel.anchorNode.closest('li') : null;
+                console.log('[Tab Key Debug] Result of sel.anchorNode.closest("li"):', closestLiCheck);
 
-                const sel = window.getSelection();
-                if (sel && sel.anchorNode) {
-                    let listItem = null;
-                    // Correctly determine listItem based on anchorNode type
-                    if (sel.anchorNode.nodeType === Node.ELEMENT_NODE) {
-                        listItem = sel.anchorNode.closest('li');
-                    } else if (sel.anchorNode.parentNode && typeof sel.anchorNode.parentNode.closest === 'function') { 
-                        // For text nodes, etc., check parentNode.closest
-                        listItem = sel.anchorNode.parentNode.closest('li');
-                    }
-
-                    // Diagnostic logs
-                    console.log('[Tab Key Debug] sel.anchorNode:', sel.anchorNode, 'Type:', sel.anchorNode.nodeType, 'Name:', sel.anchorNode.nodeName);
-                    console.log('[Tab Key Debug] sel.anchorOffset:', sel.anchorOffset);
-                    console.log('[Tab Key Debug] sel.anchorNode.parentNode:', sel.anchorNode.parentNode);
-                    console.log('[Tab Key Debug] Determined listItem:', listItem);
-                    
-                    if (listItem) {
-                        console.log('[Tab Key] Context is LI.');
-                        if (e.shiftKey) {
-                            console.log('[Tab Key] Calling listManager.handleShiftTab.');
-                            listManager.handleShiftTab(listItem);
-                        } else {
-                            console.log('[Tab Key] Calling listManager.handleTab.');
-                            listManager.handleTab(listItem);
-                        }
-                        this.updateCaretDisplayAndSave(); 
-                    } else {
-                        console.log('[Tab Key] Context is NOT LI. Tab does nothing custom here (default prevented).');
-                    }
+                if (closestLiCheck) {
+                    listItem = closestLiCheck;
+                } else if (parentOfAnchor && parentOfAnchor.nodeName === 'LI') {
+                    // Fallback: If closest fails, but direct parent is LI (e.g. anchorNode is a text node directly in LI)
+                    listItem = parentOfAnchor;
+                    console.log('[Tab Key Debug] closest("li") failed, but parentNode is LI. Using parentNode as listItem.');
                 }
-                return; // Tab key has been handled (either by listManager or by doing nothing after preventDefault)
+                console.log('[Tab Key Debug] Final determined listItem:', listItem);
+            } else {
+                // For keys other than Tab, use the standard closest check
+                listItem = sel.anchorNode.closest ? sel.anchorNode.closest('li') : null;
+            }
+            
+            if (e.key === 'Tab' && this.editorEl.contains(document.activeElement)) {
+                e.preventDefault(); 
+
+                if (listItem) { // Now listItem should be correctly identified
+                    console.log('[Tab Key] Context is LI.');
+                    const currentAnchorNode = sel.anchorNode;
+                    const currentAnchorOffset = sel.anchorOffset;
+                    console.log('[Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
+
+                    if (e.shiftKey) {
+                        console.log('[Tab Key] Calling listManager.handleShiftTab.');
+                        listManager.handleShiftTab(listItem); 
+                    } else {
+                        console.log('[Tab Key] Calling listManager.handleTab.');
+                        listManager.handleTab(listItem, currentAnchorNode, currentAnchorOffset);
+                    }
+                    this.updateCaretDisplayAndSave(); 
+                    return; 
+                } else {
+                    console.log('[Tab Key] Context is NOT LI (e.g., div, hX). Tab does nothing custom yet.');
+                }
             }
         }
         

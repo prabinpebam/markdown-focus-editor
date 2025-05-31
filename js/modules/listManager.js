@@ -49,12 +49,13 @@ const listManager = {
         return true;
     },
 
-    handleTab(listItemElement) {
+    handleTab(listItemElement, originalAnchorNode, originalAnchorOffset) { // Added parameters
         if (!this.editor || !listItemElement) {
             console.log('[handleTab] Aborted: No editor or listItemElement.');
             return;
         }
-        console.log('[handleTab] Processing LI: "' + listItemElement.textContent.trim().substring(0, 50) + '..."');
+        console.log('[handleTab] Processing LI: "' + listItemElement.textContent.trim().substring(0, 50) + 
+                    '" with original caret: Node:', originalAnchorNode, 'Offset:', originalAnchorOffset);
 
         const parentList = listItemElement.parentNode;
         if (!parentList || (parentList.tagName !== 'UL' && parentList.tagName !== 'OL')) {
@@ -96,6 +97,9 @@ const listManager = {
             console.log('[handleTab] Case 2: Previous sibling is a List (' + previousSibling.tagName + '). Attempting to move LI into it.');
             const targetList = previousSibling;
             targetList.appendChild(listItemElement);
+            // Verify the new parent of listItemElement
+            console.log('[handleTab Case 2] listItemElement new parent is: <' + (listItemElement.parentNode ? listItemElement.parentNode.tagName : 'null') + 
+                        '>. Expected parent (targetList) was: <' + targetList.tagName + '>.');
             indented = true;
         } else {
             console.log('[handleTab] No valid previous LI sibling or sibling List found. Cannot indent this item using current logic.');
@@ -111,32 +115,54 @@ const listManager = {
                     return; 
                 }
                 const rng = document.createRange();
-                console.log('[handleTab setTimeout] Setting caret for LI: "' + listItemElement.textContent.trim().substring(0,50) + '"');
+                console.log('[handleTab setTimeout] Attempting to restore caret for LI: "' + listItemElement.textContent.trim().substring(0,50) + '"');
 
                 try {
-                    let targetNodeForCaret = listItemElement.firstChild;
-
-                    if (!targetNodeForCaret || targetNodeForCaret.nodeType !== Node.TEXT_NODE) {
-                        console.log('[handleTab setTimeout] First child not a text node or null. Ensuring text node exists.');
-                        const newTextNode = document.createTextNode('');
-                        if (targetNodeForCaret) { 
-                            listItemElement.insertBefore(newTextNode, targetNodeForCaret);
-                        } else { 
-                            listItemElement.appendChild(newTextNode);
+                    let caretRestoredToOriginal = false;
+                    if (originalAnchorNode && listItemElement.contains(originalAnchorNode)) {
+                        // Check if originalAnchorNode can accept the offset
+                        if (originalAnchorNode.nodeType === Node.TEXT_NODE || 
+                            (originalAnchorNode.nodeType === Node.ELEMENT_NODE && originalAnchorOffset <= originalAnchorNode.childNodes.length)) {
+                            
+                            // Validate offset for text nodes
+                            if (originalAnchorNode.nodeType === Node.TEXT_NODE && originalAnchorOffset > originalAnchorNode.nodeValue.length) {
+                                console.log('[handleTab setTimeout] Original anchorOffset exceeds text node length. Falling back.');
+                            } else {
+                                rng.setStart(originalAnchorNode, originalAnchorOffset);
+                                caretRestoredToOriginal = true;
+                                console.log('[handleTab setTimeout] Caret RESTORED to original position in Node:', originalAnchorNode, 'Offset:', originalAnchorOffset);
+                            }
+                        } else {
+                            console.log('[handleTab setTimeout] Original anchorNode type/offset invalid for setStart. Falling back.');
                         }
-                        targetNodeForCaret = newTextNode;
-                        console.log('[handleTab setTimeout] Created/prepended new text node for caret.');
+                    } else {
+                        console.log('[handleTab setTimeout] Original anchorNode not found in listItemElement or invalid. Falling back.');
+                    }
+
+                    if (!caretRestoredToOriginal) {
+                        // Fallback: Place caret at the beginning of the listItemElement
+                        let targetNodeForFallback = listItemElement.firstChild;
+                        if (!targetNodeForFallback || targetNodeForFallback.nodeType !== Node.TEXT_NODE) {
+                            const newTextNode = document.createTextNode('');
+                            if (targetNodeForFallback) { // If firstChild exists but isn't text (e.g. <br>)
+                                listItemElement.insertBefore(newTextNode, targetNodeForFallback);
+                            } else { // If listItemElement is completely empty
+                                listItemElement.appendChild(newTextNode);
+                            }
+                            targetNodeForFallback = newTextNode;
+                        }
+                        rng.setStart(targetNodeForFallback, 0);
+                        console.log('[handleTab setTimeout] Caret set to FALLBACK position (start of LI) in Node:', targetNodeForFallback);
                     }
                     
-                    rng.setStart(targetNodeForCaret, 0);
                     rng.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(rng);
-                    console.log('[handleTab setTimeout] Caret set in node:', targetNodeForCaret, 'at offset 0. Node parent:', targetNodeForCaret.parentNode ? targetNodeForCaret.parentNode.tagName : 'null');
+                    // console.log('[handleTab setTimeout] Final caret set. Node parent:', sel.anchorNode.parentNode ? sel.anchorNode.parentNode.tagName : 'null');
                     
                 } catch (e) {
                     console.error("[handleTab setTimeout] Error setting caret:", e, "Attempting focus on LI.");
-                    listItemElement.focus();
+                    listItemElement.focus(); // General fallback
                 }
             }, 0); 
         } // This closes the 'if (indented)' block
