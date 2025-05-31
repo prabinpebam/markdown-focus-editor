@@ -168,11 +168,285 @@ const listManager = {
         } // This closes the 'if (indented)' block
     }, // This closes the 'handleTab' method
 
-    handleShiftTab(listItemElement) {
-        if (!this.editor || !listItemElement) return;
-        // console.log('[Log] listManager: handleShiftTab called for LI:', listItemElement.textContent.substring(0,20));
-        // No DOM change, no focus change. True no-op for now.
-        // If DOM is changed in future: console.log('[DOM Render] List item outdented/transformed.');
+    handleShiftTab(listItemElement, originalAnchorNode, originalAnchorOffset) {
+        if (!this.editor || !listItemElement) {
+            console.log('[handleShiftTab] Aborted: No editor or listItemElement.');
+            return;
+        }
+        console.log('[handleShiftTab] Processing LI: "' + listItemElement.textContent.trim().substring(0, 50) +
+                    '" with original caret: Node:', originalAnchorNode, 'Offset:', originalAnchorOffset);
+
+        const currentList = listItemElement.parentNode;
+        if (!currentList || (currentList.tagName !== 'UL' && currentList.tagName !== 'OL')) {
+            console.log('[handleShiftTab] Aborted: listItemElement has no valid UL/OL parentList. Parent:', currentList);
+            return;
+        }
+        console.log('[handleShiftTab] Current list is:', currentList.tagName, currentList);
+
+        const parentOfCurrentList = currentList.parentNode;
+        console.log('[handleShiftTab] Parent of current list is:', parentOfCurrentList ? parentOfCurrentList.tagName : 'null', parentOfCurrentList);
+
+        let outdented = false;
+        let targetElementForCaret = listItemElement; // Default to current LI
+
+        const isFirstItemInCurrentList = !listItemElement.previousElementSibling;
+        const isLastItemInCurrentList = !listItemElement.nextElementSibling;
+
+        // Collect following siblings *before* moving listItemElement or modifying currentList structure around it.
+        const followingSiblingsInCurrentList = [];
+        if (!isLastItemInCurrentList) {
+            let nextSib = listItemElement.nextElementSibling;
+            while (nextSib) {
+                followingSiblingsInCurrentList.push(nextSib);
+                nextSib = nextSib.nextElementSibling;
+            }
+        }
+        // Detach these followers from currentList now. They will be re-homed later.
+        followingSiblingsInCurrentList.forEach(sib => currentList.removeChild(sib));
+
+
+        // Scenario 1: Outdent from a list nested under an LI (standard nesting)
+        // Structure: grandParentList (UL/OL) > parentLI (LI) > currentList (UL/OL) > listItemElement (LI)
+        if (parentOfCurrentList && parentOfCurrentList.tagName === 'LI') {
+            const parentLI = parentOfCurrentList;
+            const grandParentList = parentLI.parentNode;
+
+            if (grandParentList && (grandParentList.tagName === 'UL' || grandParentList.tagName === 'OL')) {
+                console.log('[handleShiftTab] Case 1: Outdenting from LI-nested list. Grandparent list is:', grandParentList.tagName);
+                
+                if (isFirstItemInCurrentList && isLastItemInCurrentList) { // Only item in currentList
+                    console.log('[handleShiftTab Case 1] Item is only child of currentList.');
+                    // Move listItemElement to grandParentList, after parentLI.
+                    grandParentList.insertBefore(listItemElement, parentLI.nextSibling);
+                    // currentList is now empty, remove it from parentLI.
+                    parentLI.removeChild(currentList);
+                    outdented = true;
+                } else if (isFirstItemInCurrentList) { // First item, but not only item
+                    console.log('[handleShiftTab Case 1] Item is first child.');
+                    // Move listItemElement to grandParentList, *before* parentLI.
+                    grandParentList.insertBefore(listItemElement, parentLI);
+                    // The followingSiblings (already detached) are re-appended to currentList,
+                    // which remains inside parentLI and now only contains these followers.
+                    followingSiblingsInCurrentList.forEach(sib => currentList.appendChild(sib));
+                    // If currentList became empty after this (e.g. no followers), remove it.
+                    // This shouldn't happen if it wasn't the only item, but good check.
+                    if (currentList.children.length === 0) {
+                        parentLI.removeChild(currentList);
+                    }
+                    outdented = true;
+                } else { // Middle or Last item (but not only item)
+                    console.log('[handleShiftTab Case 1] Item is middle or last child.');
+                    // Move listItemElement to grandParentList, after parentLI.
+                    grandParentList.insertBefore(listItemElement, parentLI.nextSibling);
+                    outdented = true;
+                    
+                    // If there were following siblings (i.e., it was a middle item),
+                    // they form a new sub-list under the (now outdented) listItemElement.
+                    // If it was the last item, followingSiblingsInCurrentList is empty, so no sub-list is created.
+                    if (followingSiblingsInCurrentList.length > 0) { // This implies it was a middle item
+                        const newListForFollowing = document.createElement(currentList.tagName); // e.g. <ul>
+                        followingSiblingsInCurrentList.forEach(sib => newListForFollowing.appendChild(sib));
+                        listItemElement.appendChild(newListForFollowing); // Append <ul><li>follower</li>...</ul> to the outdented LI
+                        console.log('[handleShiftTab Case 1] Appended new sub-list for following items to the outdented middle item.');
+                    }
+                }
+
+                // If currentList (where listItemElement came from, still inside parentLI) is now empty, remove it.
+                // This applies if listItemElement was the last one, or if it was first and had no followers (covered by only child case).
+                if (currentList.children.length === 0 && parentLI.contains(currentList)) {
+                    console.log('[handleShiftTab Case 1] Original currentList (in parentLI) is empty after operations, removing it.');
+                    parentLI.removeChild(currentList);
+                }
+            } else {
+                console.log('[handleShiftTab Case 1] Cannot outdent further (grandparent is not a list or does not exist).');
+            }
+        }
+        // Scenario 2: Outdent from a list directly nested under another list (not an LI)
+        // Structure: greatGrandParent (any) > parentList (UL/OL) > currentList (UL/OL) > listItemElement (LI)
+        else if (parentOfCurrentList && (parentOfCurrentList.tagName === 'UL' || parentOfCurrentList.tagName === 'OL')) {
+            const parentList = parentOfCurrentList;
+            console.log('[handleShiftTab] Case 2: Outdenting from list-nested list. Target parent list is:', parentList.tagName);
+
+            if (isFirstItemInCurrentList && isLastItemInCurrentList) { // Only item
+                console.log('[handleShiftTab Case 2] Item is only child of currentList.');
+                parentList.insertBefore(listItemElement, currentList.nextSibling); // Move item up
+                parentList.removeChild(currentList); // Remove now-empty currentList
+                outdented = true;
+            } else if (isFirstItemInCurrentList) {
+                console.log('[handleShiftTab Case 2] Item is first child.');
+                parentList.insertBefore(listItemElement, currentList); // Move item up, before currentList
+                outdented = true;
+            } else { // Middle or Last item
+                console.log('[handleShiftTab Case 2] Item is middle or last child.');
+                parentList.insertBefore(listItemElement, currentList.nextSibling); // Move item up, after currentList
+                outdented = true;
+            }
+            
+            // Handle followingSiblings for Case 2
+            if (outdented && followingSiblingsInCurrentList.length > 0) {
+                // Create a new list for following items, make it a sibling to the outdented listItemElement,
+                // and also a sibling to the original currentList (which now contains preceding items).
+                const newListForFollowing = document.createElement(currentList.tagName);
+                followingSiblingsInCurrentList.forEach(sib => newListForFollowing.appendChild(sib));
+                parentList.insertBefore(newListForFollowing, listItemElement.nextSibling);
+                console.log('[handleShiftTab Case 2] Created new list for following items.');
+            }
+            
+            // If currentList (where listItemElement came from) is now empty, remove it.
+            if (currentList.children.length === 0 && parentList.contains(currentList)) {
+                 console.log('[handleShiftTab Case 2] Original currentList is empty, removing it.');
+                parentList.removeChild(currentList);
+            }
+
+        }
+        // Scenario 3: Outdent from a top-level list (convert to DIV)
+        else if (parentOfCurrentList && parentOfCurrentList === this.editor.editorEl) {
+             console.log('[handleShiftTab] Case 3: Attempting to outdent from a top-level list (convert to DIV).');
+            // This case needs to be fully fleshed out according to tech-detail.md rules for splitting lists
+            // For now, a simplified conversion:
+            if (currentList.children.length === 1) { // Only item in the list
+                const div = document.createElement('div');
+                while(listItemElement.firstChild) { div.appendChild(listItemElement.firstChild); }
+                currentList.replaceWith(div);
+                targetElementForCaret = div;
+                outdented = true;
+            } else if (isFirstItemInCurrentList) {
+                const div = document.createElement('div');
+                while(listItemElement.firstChild) { div.appendChild(listItemElement.firstChild); }
+                currentList.parentNode.insertBefore(div, currentList);
+                listItemElement.remove();
+                targetElementForCaret = div;
+                outdented = true;
+            } else if (isLastItemInCurrentList) {
+                 const div = document.createElement('div');
+                while(listItemElement.firstChild) { div.appendChild(listItemElement.firstChild); }
+                currentList.parentNode.insertBefore(div, currentList.nextSibling);
+                listItemElement.remove();
+                targetElementForCaret = div;
+                outdented = true;
+            } else { // Middle item - requires splitting the list
+                console.log('[handleShiftTab Case 3] Middle item outdent to DIV - requires list splitting (complex).');
+                // Placeholder: convert to div and place after currentList for now
+                const div = document.createElement('div');
+                while(listItemElement.firstChild) { div.appendChild(listItemElement.firstChild); }
+                currentList.parentNode.insertBefore(div, currentList.nextSibling); // Simple placement
+                listItemElement.remove();
+                targetElementForCaret = div;
+                outdented = true;
+                // Proper split would involve creating a new list for items after this one.
+            }
+            // Note: followingSiblingsInCurrentList are not explicitly handled here for DIV conversion yet.
+            // The current logic for DIV conversion is simplified.
+        } else {
+            console.log('[handleShiftTab] Cannot outdent: Unhandled scenario or already at highest level relative to direct parent. Parent of current list:', parentOfCurrentList ? parentOfCurrentList.tagName : 'null');
+            // Re-attach followers if no outdent operation happened, to restore currentList state.
+            if (followingSiblingsInCurrentList.length > 0) {
+                followingSiblingsInCurrentList.forEach(sib => currentList.appendChild(sib));
+                console.log('[handleShiftTab] Re-attached followers as no outdent occurred.');
+            }
+        }
+
+
+        if (outdented) {
+            console.log('[DOM Render] List item outdented. Moved LI/DIV successfully.');
+            setTimeout(() => {
+                const sel = window.getSelection();
+                if (!sel) {
+                    console.error('[handleShiftTab setTimeout] Aborted: No selection object.');
+                    return;
+                }
+                const rng = document.createRange();
+                console.log('[handleShiftTab setTimeout] Attempting to restore caret for element: "' + targetElementForCaret.textContent.trim().substring(0, 50) + '"');
+                
+                try {
+                    let caretRestoredToOriginal = false;
+                    // Ensure originalAnchorNode is still valid and contained within the targetElementForCaret
+                    if (originalAnchorNode && targetElementForCaret.contains(originalAnchorNode)) {
+                        // Check if originalAnchorNode can accept the offset
+                        if (originalAnchorNode.nodeType === Node.TEXT_NODE || 
+                            (originalAnchorNode.nodeType === Node.ELEMENT_NODE && originalAnchorOffset <= originalAnchorNode.childNodes.length)) {
+                            
+                            // Validate offset for text nodes
+                            if (originalAnchorNode.nodeType === Node.TEXT_NODE && originalAnchorOffset > originalAnchorNode.nodeValue.length) {
+                                console.log('[handleShiftTab setTimeout] Original anchorOffset exceeds text node length. Falling back.');
+                            } else {
+                                rng.setStart(originalAnchorNode, originalAnchorOffset);
+                                caretRestoredToOriginal = true;
+                                console.log('[handleShiftTab setTimeout] Caret RESTORED to original position in Node:', originalAnchorNode, 'Offset:', originalAnchorOffset);
+                            }
+                        } else {
+                            console.log('[handleShiftTab setTimeout] Original anchorNode type/offset invalid for setStart. Falling back.');
+                        }
+                    } else {
+                        console.log('[handleShiftTab setTimeout] Original anchorNode not found in targetElementForCaret or invalid. Falling back.');
+                    }
+
+                    if (!caretRestoredToOriginal) {
+                        let fallbackNode = targetElementForCaret.firstChild;
+                        // Enhanced fallback logic to find a suitable node for caret
+                        if (!fallbackNode) { // Element is completely empty
+                            const newTextNode = document.createTextNode('');
+                            targetElementForCaret.appendChild(newTextNode);
+                            fallbackNode = newTextNode;
+                        } else if (fallbackNode.nodeType !== Node.TEXT_NODE) {
+                            // If firstChild is not text, try to find any text node or place at start of first element
+                            let foundText = false;
+                            for (const child of Array.from(targetElementForCaret.childNodes)) {
+                                if (child.nodeType === Node.TEXT_NODE) {
+                                    fallbackNode = child;
+                                    foundText = true;
+                                    break;
+                                } else if (child.nodeType === Node.ELEMENT_NODE && !foundText) {
+                                    // If no text node found yet, keep first element as potential fallback
+                                    fallbackNode = child; 
+                                }
+                            }
+                            if (!foundText && fallbackNode.nodeType === Node.ELEMENT_NODE) {
+                                // If still no text node, and fallback is an element, try to go deeper or add text
+                                let deepChild = fallbackNode.firstChild;
+                                while(deepChild && deepChild.nodeType !== Node.TEXT_NODE && deepChild.firstChild) {
+                                    deepChild = deepChild.firstChild;
+                                }
+                                if (deepChild && deepChild.nodeType === Node.TEXT_NODE) {
+                                    fallbackNode = deepChild;
+                                } else { // Prepend a text node to the element or targetElementForCaret
+                                    const newTextNode = document.createTextNode('');
+                                    (fallbackNode.nodeType === Node.ELEMENT_NODE ? fallbackNode : targetElementForCaret).insertBefore(newTextNode, (fallbackNode.nodeType === Node.ELEMENT_NODE ? fallbackNode.firstChild : fallbackNode));
+                                    fallbackNode = newTextNode;
+                                }
+                            } else if (!foundText && fallbackNode.nodeType !== Node.TEXT_NODE) {
+                                // If still not a text node (e.g. comment), create one
+                                const newTextNode = document.createTextNode('');
+                                targetElementForCaret.insertBefore(newTextNode, fallbackNode);
+                                fallbackNode = newTextNode;
+                            }
+                        }
+                        
+                        // Final check for fallbackNode type
+                        if (fallbackNode.nodeType === Node.TEXT_NODE) {
+                           rng.setStart(fallbackNode, 0);
+                        } else if (fallbackNode.nodeType === Node.ELEMENT_NODE) {
+                           rng.setStart(fallbackNode, 0); // Place at start of element
+                        } else { // Absolute fallback if node is still unsuitable
+                            const newTextNode = document.createTextNode('');
+                            targetElementForCaret.innerHTML = ''; 
+                            targetElementForCaret.appendChild(newTextNode);
+                            fallbackNode = newTextNode;
+                            rng.setStart(fallbackNode, 0);
+                        }
+                        console.log('[handleShiftTab setTimeout] Caret set to FALLBACK position in Node:', fallbackNode, 'Type:', fallbackNode.nodeType);
+                    }
+
+                    rng.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(rng);
+
+                } catch (e) {
+                    console.error("[handleShiftTab setTimeout] Error setting caret:", e, "Attempting focus on element.");
+                    targetElementForCaret.focus();
+                }
+            }, 0);
+        }
     }
 }; // This closes the 'listManager' object
 

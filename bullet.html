@@ -45,6 +45,10 @@
 
   <div id="editor" contenteditable="true" spellcheck="false">
     <div>Welcome to Markdown-Focus-Editor: Your distraction-free markdown playground. Fire up your keyboard and let witty words turn into magic!</div>
+    
+    <ul><li>Level 2 UL<br><ul><li>Level 3 UL - A<ul><li>Level 4 UL - A<ul><li>Level 4 UL - list item 1: For the first item it should remove this list item from the current ul and append it just before the current-parent-ul as an li item of the grandparent ul.</li><li>Level 4 UL - list item 2: When you outdent this item, it should not become the last item of the immediately grandparent ul. This item is in between two li, that means when you outdent this, the expected behavior is that this creates a completely new ul as a peer of the current ul parent. That means you have to close the ul of the current parent ul, create an new ul with this item as&nbsp; the only item in that ul which is peer to the current parent UL and then add open tag for a new ul for the subsequent li item which is currently peer to this item.</li><li>Level 5 UL - list item 1</li><ul><li>Level 5 UL - list item 2: Shift+tab works as expected for the last item which is the case it handles.</li></ul></ul></li></ul></li><li>Level 3 UL - B<ul><li>Level 3 UL - B - Item 1</li><li>Level 3 UL - B - Item 2</li></ul></li></ul></li></ul>
+    
+    
     <ul>
       <li>List item lvl 1</li>      
       <li>List item lvl 2</li>

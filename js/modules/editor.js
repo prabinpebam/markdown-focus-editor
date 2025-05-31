@@ -93,22 +93,25 @@ const editor = {
                 e.preventDefault(); 
 
                 if (listItem) { // Now listItem should be correctly identified
-                    console.log('[Tab Key] Context is LI.');
                     const currentAnchorNode = sel.anchorNode;
                     const currentAnchorOffset = sel.anchorOffset;
-                    console.log('[Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
-
+                    
                     if (e.shiftKey) {
-                        console.log('[Tab Key] Calling listManager.handleShiftTab.');
-                        listManager.handleShiftTab(listItem); 
+                        console.log('[Shift+Tab Key] Context is LI.'); // Specific log for Shift+Tab
+                        console.log('[Shift+Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
+                        console.log('[Shift+Tab Key] Calling listManager.handleShiftTab.');
+                        listManager.handleShiftTab(listItem, currentAnchorNode, currentAnchorOffset); 
                     } else {
+                        console.log('[Tab Key] Context is LI.');
+                        console.log('[Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
                         console.log('[Tab Key] Calling listManager.handleTab.');
                         listManager.handleTab(listItem, currentAnchorNode, currentAnchorOffset);
                     }
                     this.updateCaretDisplayAndSave(); 
                     return; 
                 } else {
-                    console.log('[Tab Key] Context is NOT LI (e.g., div, hX). Tab does nothing custom yet.');
+                    // This log will now also apply to Shift+Tab if not in an LI context
+                    console.log(`[${e.shiftKey ? 'Shift+Tab' : 'Tab'} Key] Context is NOT LI (e.g., div, hX). Key does nothing custom yet.`);
                 }
             }
         }
