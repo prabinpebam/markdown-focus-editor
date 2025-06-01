@@ -76,20 +76,37 @@ const listManager = {
         if (previousSibling && previousSibling.tagName === 'LI') {
             // Case 1: Previous sibling is an LI. Indent under it.
             console.log('[handleTab] Case 1: Previous sibling is an LI. Attempting to indent under it.');
-            let subList = previousSibling.querySelector(':scope > ul, :scope > ol'); 
+            let targetNestingList = previousSibling.querySelector(':scope > ul, :scope > ol'); 
             
-            if (subList) {
-                console.log('[handleTab] Found existing subList in previousLI: <' + subList.tagName + '>');
+            if (targetNestingList) {
+                console.log('[handleTab] Found existing subList in previousLI: <' + targetNestingList.tagName + '>');
             } else {
                 console.log('[handleTab] No existing subList in previousLI. Creating new one: <' + parentList.tagName + '>');
-                subList = document.createElement(parentList.tagName); 
-                previousSibling.appendChild(subList);
+                targetNestingList = document.createElement(parentList.tagName); 
+                previousSibling.appendChild(targetNestingList);
                 console.log('[handleTab] New subList created and appended to previousLI.');
             }
             
             console.log('[handleTab] Attempting to move LI: "' + listItemElement.textContent.trim().substring(0,50) + 
                         '" into subList of LI: "' + previousSibling.textContent.trim().substring(0,50) + '"');
-            subList.appendChild(listItemElement);
+
+            // Check if the listItemElement itself has a sub-list
+            const ownSubListOfListItemElement = listItemElement.querySelector(':scope > ul, :scope > ol');
+
+            // Move the listItemElement itself into the targetNestingList
+            targetNestingList.appendChild(listItemElement);
+
+            if (ownSubListOfListItemElement) {
+                console.log('[handleTab] listItemElement has its own sub-list. Flattening its children into targetNestingList.');
+                // If it had its own sub-list, move its children to become siblings of listItemElement
+                // in the targetNestingList
+                while (ownSubListOfListItemElement.firstChild) {
+                    targetNestingList.appendChild(ownSubListOfListItemElement.firstChild);
+                }
+                // Remove the now-empty ownSubListOfListItemElement from listItemElement
+                listItemElement.removeChild(ownSubListOfListItemElement);
+                console.log('[handleTab] Removed empty original sub-list from listItemElement.');
+            }
             indented = true;
             
         } else if (previousSibling && (previousSibling.tagName === 'UL' || previousSibling.tagName === 'OL')) {
