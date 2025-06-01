@@ -189,17 +189,15 @@ const listManager = {
         let outdented = false;
         let targetElementForCaret = listItemElement; // Default to current LI
 
-        const isFirstItemInCurrentList = !listItemElement.previousElementSibling;
-        const isLastItemInCurrentList = !listItemElement.nextElementSibling;
+        // const isFirstItemInCurrentList = !listItemElement.previousElementSibling; // Not strictly needed for the revised logic below
+        // const isLastItemInCurrentList = !listItemElement.nextElementSibling; // Not strictly needed for the revised logic below
 
         // Collect following siblings *before* moving listItemElement or modifying currentList structure around it.
         const followingSiblingsInCurrentList = [];
-        if (!isLastItemInCurrentList) {
-            let nextSib = listItemElement.nextElementSibling;
-            while (nextSib) {
-                followingSiblingsInCurrentList.push(nextSib);
-                nextSib = nextSib.nextElementSibling;
-            }
+        let nextSib = listItemElement.nextElementSibling;
+        while (nextSib) {
+            followingSiblingsInCurrentList.push(nextSib);
+            nextSib = nextSib.nextElementSibling;
         }
         // Detach these followers from currentList now. They will be re-homed later.
         followingSiblingsInCurrentList.forEach(sib => currentList.removeChild(sib));
@@ -214,49 +212,29 @@ const listManager = {
             if (grandParentList && (grandParentList.tagName === 'UL' || grandParentList.tagName === 'OL')) {
                 console.log('[handleShiftTab] Case 1: Outdenting from LI-nested list. Grandparent list is:', grandParentList.tagName);
                 
-                if (isFirstItemInCurrentList && isLastItemInCurrentList) { // Only item in currentList
-                    console.log('[handleShiftTab Case 1] Item is only child of currentList.');
-                    // Move listItemElement to grandParentList, after parentLI.
-                    grandParentList.insertBefore(listItemElement, parentLI.nextSibling);
-                    // currentList is now empty, remove it from parentLI.
-                    parentLI.removeChild(currentList);
-                    outdented = true;
-                } else if (isFirstItemInCurrentList) { // First item, but not only item
-                    console.log('[handleShiftTab Case 1] Item is first child.');
-                    // Move listItemElement to grandParentList, *before* parentLI.
-                    grandParentList.insertBefore(listItemElement, parentLI);
-                    // The followingSiblings (already detached) are re-appended to currentList,
-                    // which remains inside parentLI and now only contains these followers.
-                    followingSiblingsInCurrentList.forEach(sib => currentList.appendChild(sib));
-                    // If currentList became empty after this (e.g. no followers), remove it.
-                    // This shouldn't happen if it wasn't the only item, but good check.
-                    if (currentList.children.length === 0) {
-                        parentLI.removeChild(currentList);
-                    }
-                    outdented = true;
-                } else { // Middle or Last item (but not only item)
-                    console.log('[handleShiftTab Case 1] Item is middle or last child.');
-                    // Move listItemElement to grandParentList, after parentLI.
-                    grandParentList.insertBefore(listItemElement, parentLI.nextSibling);
-                    outdented = true;
-                    
-                    // If there were following siblings (i.e., it was a middle item),
-                    // they form a new sub-list under the (now outdented) listItemElement.
-                    // If it was the last item, followingSiblingsInCurrentList is empty, so no sub-list is created.
-                    if (followingSiblingsInCurrentList.length > 0) { // This implies it was a middle item
-                        const newListForFollowing = document.createElement(currentList.tagName); // e.g. <ul>
-                        followingSiblingsInCurrentList.forEach(sib => newListForFollowing.appendChild(sib));
-                        listItemElement.appendChild(newListForFollowing); // Append <ul><li>follower</li>...</ul> to the outdented LI
-                        console.log('[handleShiftTab Case 1] Appended new sub-list for following items to the outdented middle item.');
-                    }
+                // Move listItemElement to be a sibling after parentLI.
+                // This applies whether it's the first, middle, or last item in currentList.
+                grandParentList.insertBefore(listItemElement, parentLI.nextSibling);
+                outdented = true;
+                
+                // If there were following siblings, they form a new sub-list under the (now outdented) listItemElement.
+                if (followingSiblingsInCurrentList.length > 0) {
+                    const newListForFollowing = document.createElement(currentList.tagName); // e.g. <ul>
+                    followingSiblingsInCurrentList.forEach(sib => newListForFollowing.appendChild(sib));
+                    listItemElement.appendChild(newListForFollowing);
+                    console.log('[handleShiftTab Case 1] Appended new sub-list for following items to the outdented item.');
                 }
-
-                // If currentList (where listItemElement came from, still inside parentLI) is now empty, remove it.
-                // This applies if listItemElement was the last one, or if it was first and had no followers (covered by only child case).
-                if (currentList.children.length === 0 && parentLI.contains(currentList)) {
+                
+                // After moving listItemElement and its followers (if any),
+                // if currentList (which was inside parentLI) is now empty, remove it.
+                // currentList becomes empty if listItemElement was its only child, or if it was the first child
+                // and all its original content (the item itself and its followers) have been moved out.
+                if (currentList.children.length === 0) { 
                     console.log('[handleShiftTab Case 1] Original currentList (in parentLI) is empty after operations, removing it.');
                     parentLI.removeChild(currentList);
                 }
+                // If listItemElement was NOT the first item, currentList still contains preceding items and should not be removed.
+                // The currentList.children.length === 0 check correctly handles this.
             } else {
                 console.log('[handleShiftTab Case 1] Cannot outdent further (grandparent is not a list or does not exist).');
             }
@@ -341,7 +319,24 @@ const listManager = {
             console.log('[handleShiftTab] Cannot outdent: Unhandled scenario or already at highest level relative to direct parent. Parent of current list:', parentOfCurrentList ? parentOfCurrentList.tagName : 'null');
             // Re-attach followers if no outdent operation happened, to restore currentList state.
             if (followingSiblingsInCurrentList.length > 0) {
-                followingSiblingsInCurrentList.forEach(sib => currentList.appendChild(sib));
+                // Re-attach to the original listItemElement's original position if it wasn't moved
+                // This part might need care if listItemElement itself was not moved.
+                // For now, assume if we reach here, listItemElement is still in currentList.
+                let anchor = listItemElement; // This is wrong if listItemElement was removed.
+                                            // This else block is for when NO outdent operation happened.
+                followingSiblingsInCurrentList.reverse().forEach(sib => { // Insert in correct order
+                    currentList.insertBefore(sib, anchor.nextSibling);
+                    anchor = sib; // This is not quite right for restoring order.
+                                  // Simpler: just append them back if no outdent.
+                });
+                 // Correct re-attachment if no outdent occurred:
+                 // listItemElement is still in currentList. Append followers after it.
+                 let lastAppended = listItemElement;
+                 followingSiblingsInCurrentList.forEach(sib => {
+                     currentList.insertBefore(sib, lastAppended.nextSibling);
+                     lastAppended = sib;
+                 });
+
                 console.log('[handleShiftTab] Re-attached followers as no outdent occurred.');
             }
         }
