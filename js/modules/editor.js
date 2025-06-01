@@ -1,8 +1,61 @@
 import storage from './storage.js';
 import listManager from './listManager.js';
-import headingManager from './headingManager.js'; // Import headingManager
+import headingManager from './headingManager.js';
+
+// undoManager is assigned by app.js
+// inlineStyleManager is assigned by app.js
 
 const editor = {
+    // Define methods that will be bound in init first
+    handlePaste(e) {
+        e.preventDefault();
+        let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+        
+        text = text.replace(/\r\n|\r|\n/g, '\n').trim();
+
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        
+        const lines = text.split('\n');
+        let firstNodeInserted = null;
+        let lastNodeInserted = null;
+
+        lines.forEach((line, index) => {
+            const textNode = document.createTextNode(line);
+            if (index === 0) {
+                range.insertNode(textNode);
+                firstNodeInserted = textNode;
+                lastNodeInserted = textNode;
+                range.setStartAfter(lastNodeInserted); 
+                range.collapse(true);
+            } else {
+                const div = document.createElement('div');
+                div.appendChild(textNode);
+                let currentBlock = lastNodeInserted;
+                while(currentBlock && currentBlock.parentNode !== this.editorEl) {
+                    currentBlock = currentBlock.parentNode;
+                }
+                if (currentBlock && currentBlock.parentNode === this.editorEl) {
+                    currentBlock.parentNode.insertBefore(div, currentBlock.nextSibling);
+                } else { 
+                    this.editorEl.appendChild(div);
+                }
+                lastNodeInserted = textNode; 
+                range.setStart(lastNodeInserted, lastNodeInserted.length); 
+                range.collapse(true);
+            }
+        });
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        if (this.undoManager) {
+            this.undoManager.handleCustomChange('pasteText');
+        }
+        this.updateCaretDisplayAndSave();
+    },
+
     init() {
         this.editorEl = document.getElementById('editor');
         if (!this.editorEl) return;
@@ -17,7 +70,6 @@ const editor = {
         this.lastLogTrigger = null;
 
         // Bind 'this' for methods called directly or indirectly by event listeners
-        // Ensure these methods exist on the 'editor' object.
         this.boundHandleInputFormatting = this.handleInputFormatting.bind(this);
         this.boundHandlePotentialPostActionFormatting = this.handlePotentialPostActionFormatting.bind(this);
         this.boundHandleKeyDown = this.handleKeyDown.bind(this);
@@ -26,11 +78,15 @@ const editor = {
         this.boundHandleKeyUp = this.handleKeyUp.bind(this);
         this.boundHandleClick = this.handleClick.bind(this);
         this.boundHandleEnterKeydown = this.handleEnterKeydown.bind(this);
+        // Add new binding for paste
+        this.boundHandlePaste = this.handlePaste.bind(this);
+
 
         this.editorEl.addEventListener('keydown', this.boundHandleKeyDown);
         this.editorEl.addEventListener('mousedown', this.boundHandleMouseDown);
         document.addEventListener('mouseup',  this.boundHandleMouseUp);
         this.editorEl.addEventListener('keyup', this.boundHandleKeyUp);
+        this.editorEl.addEventListener('paste', this.boundHandlePaste); // Add paste listener
         
         this.editorEl.addEventListener('input', () => {
             if (this.isSelecting) return; 
@@ -55,27 +111,49 @@ const editor = {
             });
         }
         listManager.init(this);
-        headingManager.init(this); // Initialize headingManager
+        headingManager.init(this);
+        // inlineStyleManager is initialized in app.js and assigned to this.inlineStyleManager
     },
 
     handleKeyDown(e) {
         // Undo/Redo handling
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
-            if (e.shiftKey) { // Ctrl+Shift+Z or Cmd+Shift+Z for redo
-                // console.log('[Editor] Redo attempt');
+            if (e.shiftKey) { 
                 if (this.undoManager) this.undoManager.redo();
-            } else { // Ctrl+Z or Cmd+Z for undo
-                // console.log('[Editor] Undo attempt');
+            } else { 
                 if (this.undoManager) this.undoManager.undo();
             }
-            return; // Stop further processing for undo/redo
+            return; 
         }
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { // Ctrl+Y for redo (common on Windows)
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { 
             e.preventDefault();
-            // console.log('[Editor] Redo attempt (Ctrl+Y)');
             if (this.undoManager) this.undoManager.redo();
-            return; // Stop further processing for redo
+            return; 
+        }
+
+        // Browser default inline styles (Ctrl+B, Ctrl+I)
+        // We want to augment this, not just prevent it.
+        // The tech-detail asks for specific HTML (**<b>...</b>**)
+        // This might require intercepting and re-implementing or post-processing.
+        // For now, let's focus on the typed markdown syntax.
+        // The inlineStyleManager will handle typed syntax.
+        // For Ctrl+B/I, we might need to let browser do its thing then clean up,
+        // or fully intercept if browser default is not <b> or <i>.
+
+        // Inline style shortcuts
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'bold');
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'italic');
+            return;
+        }
+        // Using Ctrl+Shift+S for strikethrough as Ctrl+S is save
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'strikethrough');
+            return;
         }
 
 
@@ -143,42 +221,54 @@ const editor = {
         }
         
         // For other keys (Shift, Ctrl+A, Arrows, etc.)
-        if (e.shiftKey) {
+        // Set isSelecting true if shift is held down WITH an arrow key, or for Ctrl+A
+        if (e.shiftKey && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             this.isSelecting = true;
         } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             this.isSelecting = true;
-        } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-            this.isSelecting = true; 
+        } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
+            // If just an arrow key is pressed (no shift), it might collapse a selection
+            // We'll handle isSelecting = false in keyup for this.
+            // For now, don't set isSelecting to true here.
+        } else if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') {
+            // Just a modifier key press, don't set isSelecting = true yet.
+            // isSelecting will be set if combined with selection actions.
         }
+        // Note: Simple Shift + character typing should not set isSelecting = true here.
+        // The input event will handle the character insertion.
     },
 
     handleMouseDown() {
         this.preDomSnapshot = this.editorEl.innerHTML;
         this.lastLogTrigger = 'click';
-        this.isSelecting = true; 
+        this.isSelecting = true; // Mouse down always starts a potential selection
     },
 
     handleMouseUp() {
+        // If selection is collapsed after mouseup, it means it was a click, not a drag selection.
         if (window.getSelection().isCollapsed) {
             this.isSelecting = false;
         }
+        // If not collapsed, isSelecting remains true until selection is changed/cleared.
     },
 
     handleKeyUp(e) {
+        // If Shift key is released and selection is collapsed, no longer selecting.
+        // Or if any key is released and selection is collapsed.
         if (window.getSelection().isCollapsed) {
             this.isSelecting = false;
         }
+
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
             this.updateCaretDisplayAndSave(); 
             return;
         }
+        // For other keys, or if selection is not collapsed, proceed to post-action formatting.
         this.boundHandlePotentialPostActionFormatting();
     },
     
     handleClick() {
-        if (this.isSelecting && !window.getSelection().isCollapsed) {
-            return;
-        }
+        // A click typically collapses selection.
         this.isSelecting = false; 
         this.boundHandlePotentialPostActionFormatting();
     },
@@ -190,22 +280,39 @@ const editor = {
     },
 
     handleInputFormatting() {
-        if (this.isSelecting) return; 
+        // The check "if (this.isSelecting) return;" at the beginning of this function
+        // might be too aggressive if 'isSelecting' is true just because Shift was held.
+        // The 'input' event fires after a character (like 'A' from Shift+'a') is inserted.
+        // At this point, the selection is usually collapsed.
+        
+        // Let's rely on the selection state at the moment the input event fires.
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+            // If there's an active, non-collapsed selection (e.g., user selected text and typed over it),
+            // then maybe skip custom inline formatting for now, or handle it differently.
+            // For this specific request, inline formatting is on first char typed.
+            // If user types over a selection, the "first char" logic might be complex.
+            // For now, let's allow it to proceed and see. The inlineStyleManager checks the text node content.
+        }
+
+
         if (this.devToggle && !this.devToggle.checked) {
-            this.updateCaretDisplayAndSave(); 
+            this.updateCaretDisplayAndSave(); // No DOM change, just update display
             return;
         }
 
-        // Record state BEFORE potential transformation if input is likely to cause one
-        // This is tricky because simple typing shouldn't spam history.
-        // A better place might be *after* a transformation is confirmed.
-        // if (this.undoManager) this.undoManager.recordState('beforeInputFormattingAttempt');
-
+        // Capture caret position *before* any potential transformation
+        const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
 
         setTimeout(() => {
-            let absCaretPos = this.getAbsoluteCaretPosition();
+            // Note: absCaretPos is captured outside setTimeout to reflect state *before* input processing.
+            // If a transformation occurs, the caret might be programmatically set by the transforming module.
+            // editor.restoreCaret(absCaretPosBeforeTransform) is a fallback if modules don't set it precisely.
+
             const sel = window.getSelection();
-            let blockToProcess = null;
+            let blockToProcess = null; 
+            let textNodeForInline = null; 
+            let offsetInTextNode = 0;
 
             if (sel && sel.anchorNode) {
                 blockToProcess = sel.anchorNode;
@@ -213,65 +320,91 @@ const editor = {
                     blockToProcess = blockToProcess.parentNode;
                 }
                 if (blockToProcess === this.editorEl) blockToProcess = sel.anchorNode.childNodes[sel.anchorOffset] || sel.anchorNode.lastChild;
+
+                if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
+                    textNodeForInline = sel.anchorNode;
+                    offsetInTextNode = sel.anchorOffset;
+                }
             }
-            
+
             let transformationOccurred = false;
-            if (blockToProcess && blockToProcess.parentNode === this.editorEl) { 
+            if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
                  transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
-                 // If transformationOccurred, the specific transforming function should have called undoManager.
+            }
+
+            if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
+                // For inline styles, the inlineStyleManager should handle precise caret placement.
+                // The transformationOccurred flag is set if it makes a change.
+                transformationOccurred = this.inlineStyleManager.checkAndApplyInlineStyles(textNodeForInline, offsetInTextNode);
             }
 
             if (transformationOccurred) {
-                absCaretPos = this.getAbsoluteCaretPosition(); 
-                // The call to recordState should happen inside attemptBlockTransformations or its sub-functions
+                // If a transformation happened, the specific module (block or inline)
+                // should have ideally placed the caret correctly.
+                // A general restoreCaret might be too broad if the caret was already set precisely.
+                // However, if the transformation involved replacing a whole block,
+                // restoring based on absolute position might be necessary.
+                // For now, let's assume modules handle their caret.
+                // If issues persist, we might need a more nuanced restoreCaret call.
+                // The main point is that applyFocusAndSave will use the *current* caret after transformation.
+                this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true); // Pass true for transformationOccurred
             } else {
-                // If no transformation, but it was a significant input (e.g. space, punctuation), maybe record.
-                // This needs careful thought to avoid too many history states.
-                // For now, only record on explicit transformations.
+                // No transformation, browser handled caret.
+                this.applyFocusAndSave(absCaretPosBeforeTransform, false); // Pass false
             }
-            
-            this.applyFocusAndSave(absCaretPos, transformationOccurred); 
             this.lastLogTrigger = null;
-        }, 0); 
+        }, 0);
     },
     
     handlePotentialPostActionFormatting() {
         if (this.isSelecting) return;
          if (this.devToggle && !this.devToggle.checked) {
-            this.updateCaretDisplayAndSave();
+            this.updateCaretDisplayAndSave(); // No DOM change, just update display
             return;
         }
+        
+        const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
 
         setTimeout(() => {
-            let absCaretPos = this.getAbsoluteCaretPosition();
-            let transformationOccurred = false;
+            let transformationOccurred = false; // Renamed from headingReverted for clarity
 
-            const headingReverted = headingManager.checkAndRevertBrokenHeadings();
-            if (headingReverted) {
-                // headingManager.checkAndRevertBrokenHeadings should call undoManager if it reverts
-                absCaretPos = this.getAbsoluteCaretPosition();
+            const headingWasReverted = headingManager.checkAndRevertBrokenHeadings();
+            if (headingWasReverted) {
+                // headingManager should have placed the caret correctly.
                 transformationOccurred = true;
             }
             
-            this.applyFocusAndSave(absCaretPos, transformationOccurred); 
+            if (transformationOccurred) {
+                this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true);
+            } else {
+                this.applyFocusAndSave(absCaretPosBeforeTransform, false);
+            }
 
             this.preDomSnapshot = null;
             this.lastLogTrigger = null;
         }, 0); 
     },
 
-    applyFocusAndSave(absCaretPos, transformationOccurred) {
+    applyFocusAndSave(currentAbsoluteCaretPos, transformationDidOccur) {
         const focusToggle = document.getElementById('focus-toggle');
         if (focusToggle && focusToggle.checked) {
             const text = this.editorEl.innerText;
-            const focusRange = this.calculateFocusRange(text, absCaretPos);
+            // Use currentAbsoluteCaretPos which reflects the caret after any transformation
+            const focusRange = this.calculateFocusRange(text, currentAbsoluteCaretPos);
             this.applyFocusFormatting(focusRange);
         }
         
-        if (transformationOccurred) {
-            this.restoreCaret(absCaretPos);
-        }
-        this.updateCaretDisplayAndSave();
+        // The decision to call restoreCaret is now removed from here.
+        // Modules that transform the DOM are responsible for setting the caret.
+        // If a general restore was needed, it would be based on absCaretPos *before* transform,
+        // and only if transformationDidOccur.
+        // For now, we trust modules to set caret. If not, this is where a fallback restore would go.
+        // if (transformationDidOccur) {
+        //     // This might be needed if modules don't precisely place the caret after major DOM changes.
+        //     // this.restoreCaret(absCaretPosBeforeTransform); // Using the position *before* the change.
+        // }
+
+        this.updateCaretDisplayAndSave(); // This always reads the *current* caret position.
     },
     
     updateCaretDisplayAndSave() {
@@ -594,7 +727,7 @@ const editor = {
         return { start, end };
     },
 
-    // revertBrokenHeading method is now moved to headingManager.js
-}; // This should be the closing brace for the 'editor' object.
+    // revertBrokenHeading method was removed as it's handled by headingManager
+};
 
 export default editor;

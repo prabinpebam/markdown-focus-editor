@@ -5,6 +5,7 @@ import theme from './modules/theme.js';
 import storage from './modules/storage.js';
 import utils from './modules/utils.js';
 import undoManager from './modules/undoManager.js'; // Correctly import default
+import inlineStyleManager from './modules/inlineStyleManager.js'; // Import new manager
 
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize editor functionality (handles caret, markdown formatting & focus mode)
@@ -22,6 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize UndoManager and make it available to the editor instance
     undoManager.init(editor);
     editor.undoManager = undoManager; // Make undoManager accessible from editor instance
+
+    // Initialize InlineStyleManager
+    inlineStyleManager.init(editor); // Pass editor instance
+    editor.inlineStyleManager = inlineStyleManager; // Make it accessible from editor instance
+
 
     // Load persisted settings such as theme, font size, focus state, etc.
     storage.loadSettings(); // Should ideally be called after editor and other modules are ready

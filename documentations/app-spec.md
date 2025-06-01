@@ -18,7 +18,6 @@ Give writers a calm, distraction-free space for drafting Markdown notes or artic
 | Editor area | Centre of page | Plain text, monospace *Roboto Mono* by default. |
 | Hamburger button | Fixed, top-left | Shows / hides toolbar. |
 | Toolbar | Centred overlay | Semi-transparent, blurred background; contains icon buttons. |
-| Font modal | Centre of screen | Lists top 50 Google Fonts; selecting one applies it instantly. |
 
 ## 4 User Controls
 * **Save** – icon of a floppy disk. Downloads current text.  
@@ -32,3 +31,14 @@ Give writers a calm, distraction-free space for drafting Markdown notes or artic
 Saved to local storage so the workspace feels familiar each time:  
 `theme`, `focusEnabled`, `fontSize`, `lastContent`, `caretPosition`.
 
+
+# Copy paste support
+
+If user paste anything with formatting and style,
+- remove all the formatting and keep only the html tags.
+- remove all empty html tags
+- All html tags should be converted to a corresponding match of the formatting that's allowed in this doc.
+   - Allowed formatting are
+      - One of the hx tag
+      - ul/ol
+      - a normal div that just contains the body text.

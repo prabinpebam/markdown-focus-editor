@@ -127,7 +127,7 @@ Maintain a separate js file as this can become big.
       </li>
       <li>Chapter 2</li>
     </ol>
-\```
+```
 
 The ul and ol markers will be as below.
 
@@ -204,5 +204,39 @@ DOM is rendered only the first time an list item syntax match happens. Just one 
 3. Walk forwards until 2nd terminator found. The terminator is included in the focus amd it is the focus end index.
   1. If only 1 or no terminator is found, that means the caret is in the end of the doc. Hence the end of the doc itself is the focust end index.
 4. Apply focus style during DOM building
+
+
+# text style support
+We need to retain the md syntax in the ui, so the following is what I want.
+
+
+Bold: **text** or __text__ -> **<strong>text</strong>**
+Italic: *text* or _text_ -> *<em>text</em>*
+Bold & Italic: ***text*** or ___text___ -> ***<strong><em>text</em></strong>*** (or ***<em><strong>text</strong></em>***)
+Strikethrough: ~~text~~ -> ~~<s>text</s>~~
+
+This way caret calculation should also be accurate and retained to what the user typed.
+
+I see that for contenteditable browser already support ctrl+b and ctrl+i, and it uses <b></b> and <i></i> for these.
+I want to work with browser behavior as much as possible.
+
+md syntax and browser shortcut should work together.
+that means
+- if ctrl+b is pressed with nothing selected
+   - **<b></b>** should be immediately created with the curson inside the tag.
+- if ctrl+b is pressed with some text selected
+   - **<b>some text</b>** should be the outcome with the text still being selected after the creation
+
+Similar behavior for the other styles.
+
+For style with md syntax
+- The moment user types "**(any character other than space)"
+   - **<b>(whatever character the user typed)</b>** should be immediately created with the curson position preserved after the character.
+
+- The moment user types "*(any character other than space)"
+   - *<i>(whatever character the user typed)</i>* should be immediately created with the curson position preserved after the character.
+
+- The moment user types "~~(any character other than space)"
+   - ~~<s>(whatever character the user typed)</s>~~ should be immediately created with the curson position preserved after the character.
 
 

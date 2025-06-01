@@ -274,12 +274,14 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
 
 /* CSS variables for theme integration */
 :root {
+    --text-color-intense: #000;
     --text-color: #333;
     --text-dim-color: rgba(51, 51, 51, 0.4);
     --base-font: 16px;                 /* ← single source of truth           */
 }
 
 .dark-theme {
+    --text-color-intense: #fff;
     --text-color: #e0e0e0;
     --text-dim-color: rgba(224, 224, 224, 0.4);
 }
@@ -367,4 +369,71 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
     font-family:inherit;
 }
 
+b{
+    font-weight: 900;
+    color: var(--text-color-intense);
+}
 
+
+/* Inline style markers using CSS pseudo-elements */
+b::before, b::after,
+i::before, i::after,
+s::before, s::after {
+    font-size: calc(var(--base-font) * .85); /* Slightly smaller than text */
+    opacity: 0.7; /* Slightly dimmer */
+    font-weight: normal; /* Markers shouldn't be bold themselves */
+    color: var(--text-color); /* Use standard text color for markers */
+    /* Prevent selection of pseudo-elements if possible, though browser support varies */
+    user-select: none; 
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;    
+}
+
+b::before {
+    content: "**";
+    margin-right: 0.1em; /* Optional small spacing */
+}
+b::after {
+    content: "**";
+    margin-left: 0.1em; /* Optional small spacing */
+}
+
+i::before {
+    content: "*";
+    margin-right: 0.1em;
+}
+i::after {
+    content: "*";
+    margin-left: 0.1em;
+}
+
+s::before {
+    content: "~~";
+    margin-right: 0.1em;
+}
+s::after {
+    content: "~~";
+    margin-left: 0.1em;
+}
+
+/* For <b><i>text</i></b> to appear as ***text***:
+   The b::before will add "**" and i::before will add "*", visually forming "***".
+   Similarly for ::after. This relies on the visual composition.
+   No special CSS needed for b > i if this composition is acceptable.
+*/
+
+/* Ensure that when text is selected, the pseudo-elements don't get weird selection background */
+::selection {
+    background-color: var(--selection-bg-color, #ACCEF7); /* Define this variable if not already */
+    color: var(--selection-text-color, #000);
+}
+:root {
+    --selection-bg-color: #ACCEF7;
+    --selection-text-color: #000;
+}
+
+.dark-theme {
+    --selection-bg-color: #4a5c70; /* Dark theme selection background */
+    --selection-text-color: #fff;
+}
