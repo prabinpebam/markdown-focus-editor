@@ -71,6 +71,7 @@ body {
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, .1);
 }
 
 #toolbar.visible {
@@ -261,7 +262,7 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
 }
 
 .dark-theme #toolbar {
-    background: rgba(40, 40, 40, 0.95);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .dark-theme #toolbar button img {

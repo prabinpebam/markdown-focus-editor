@@ -1,6 +1,7 @@
 import storage from './storage.js';
 import fileManager from './fileManager.js';
 import theme from './theme.js'; // Assuming theme.js handles actual theme toggling logic
+import editor from './editor.js'; // Assuming editor.js might be needed for font size application
 
 const toolbar = {
     init() {
@@ -15,6 +16,7 @@ const toolbar = {
         this.fullscreenButton = document.getElementById('fullscreen');
         this.focusToggle = document.getElementById('focus-toggle');
         this.editorEl = document.getElementById('editor'); // Needed for font size changes
+        this.baseFontSize = 16; // Default base font size
 
         // Hamburger menu toggle
         if (this.hamburgerEl && this.toolbarEl) {
@@ -72,14 +74,49 @@ const toolbar = {
                 // editor.setFocusMode(e.target.checked); 
             });
         }
+
+        // Add event listener to document to hide toolbar when clicking outside
+        document.addEventListener('click', (event) => {
+            if (this.toolbarEl && this.toolbarEl.classList.contains('visible')) {
+                // Check if the click is outside the toolbar and not on the hamburger button
+                if (!this.toolbarEl.contains(event.target) && event.target !== this.hamburgerEl) {
+                    this.hideToolbar();
+                }
+            }
+        });
+    },
+
+    toggleToolbar() {
+        if (this.toolbarEl) {
+            this.toolbarEl.classList.toggle('visible');
+            this.hamburgerEl.classList.toggle('active');
+        }
+    },
+
+    hideToolbar() {
+        if (this.toolbarEl) {
+            this.toolbarEl.classList.remove('visible');
+            this.hamburgerEl.classList.remove('active');
+        }
     },
 
     changeFontSize(delta) {
-        if (!this.editorEl) return;
-        let currentSize = parseFloat(getComputedStyle(this.editorEl).fontSize);
-        let newSize = Math.max(8, Math.min(48, currentSize + delta)); // Clamp between 8px and 48px
-        this.editorEl.style.fontSize = newSize + 'px';
-        storage.saveSettings('fontSize', newSize);
+        let currentSize = parseInt(getComputedStyle(document.body).getPropertyValue('--base-font'), 10) || this.baseFontSize;
+        let newSize = currentSize + delta;
+        newSize = Math.max(8, Math.min(newSize, 48)); // Clamp between 8px and 48px
+        this.setFontSize(newSize);
+    },
+
+    setFontSize(size) {
+        document.body.style.setProperty('--base-font', `${size}px`);
+        this.baseFontSize = size; // Update internal tracking
+        storage.saveSettings('fontSize', size);
+        // If editor element directly uses font-size, update it too
+        if (editor.editorEl) {
+            // This might be redundant if editor's CSS inherits --base-font,
+            // but explicit set ensures it if editor has its own specific font-size rule.
+            // editor.editorEl.style.fontSize = `${size}px`;
+        }
     },
 
     toggleFullscreen() {

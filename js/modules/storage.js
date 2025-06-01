@@ -1,40 +1,50 @@
+import editor from './editor.js';
+import theme from './theme.js';
+import toolbar from './toolbar.js';
+
 const storage = {
     loadSettings() {
-        // Apply theme
-        const themePref = localStorage.getItem('theme') || 'light';
-        document.body.classList.remove('light-theme', 'dark-theme');
-        document.body.classList.add(themePref + '-theme');
-        
-        const editorEl = document.getElementById('editor'); // Get editor element
+        const editorEl = document.getElementById('editor'); // Get editor element once
 
-        // Apply font family if saved
+        // Load and apply theme
+        const themePref = localStorage.getItem('theme') || 'light'; // Default to 'light' string
+        theme.applyTheme(themePref);
+
+        // Load and apply font family
         const fontFamily = localStorage.getItem('fontFamily');
         if (fontFamily && editorEl) {
             editorEl.style.fontFamily = fontFamily;
         }
-        // Apply font size if saved
-        const fontSize = localStorage.getItem('fontSize');
-        if (fontSize && editorEl) {
-            editorEl.style.fontSize = fontSize + 'px';
-        }
-        // Set focus mode toggle based on saved value
-        const focusEnabled = localStorage.getItem('focusEnabled');
-        const focusToggle = document.getElementById('focus-toggle');
-        if (focusToggle) {
-            focusToggle.checked = (focusEnabled === 'true');
+
+        // Load and apply font size (use toolbar's method for consistency)
+        const fontSize = localStorage.getItem('fontSize'); // This will be a string e.g. "16"
+        if (fontSize && toolbar.setFontSize) {
+            toolbar.setFontSize(parseInt(fontSize, 10)); // Ensure it's a number
         }
 
-        // Load last saved content into the editor
+        // Load and set focus mode toggle
+        const focusEnabled = localStorage.getItem('focusEnabled'); // String "true" or "false"
+        const focusToggle = document.getElementById('focus-toggle');
+        if (focusToggle && focusEnabled !== null) {
+            focusToggle.checked = (focusEnabled === 'true');
+            // If editor needs to react to focus mode change on load, call relevant editor method here
+            // Example: if (editor.applyFocusVisibility) editor.applyFocusVisibility();
+        }
+
+        // Load last saved content
         const lastContent = localStorage.getItem('lastContent');
         if (lastContent && editorEl) {
-            // Only set content if it's different from the default initial content
-            // to avoid unnecessary 'input' event if content is already the default.
-            // However, for simplicity and to ensure it always loads, we'll set it.
-            // The initial content is simple, so an extra formatContent call is minor.
             editorEl.innerHTML = lastContent;
         }
+        // Note: editor.undoManager.recordInitialState(); in app.js handles initial undo state.
     },
+
     saveSettings(key, value) {
+        // Ensure consistent string saving for boolean-like values if necessary,
+        // though localStorage stringifies everything anyway.
+        // For 'theme', value is already 'light' or 'dark'.
+        // For 'focusEnabled', value would be true/false, stringified to "true"/"false".
+        // For 'fontSize', value is a number, stringified.
         localStorage.setItem(key, value);
     }
 };
