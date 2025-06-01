@@ -1,5 +1,6 @@
 import storage from './storage.js';
 import listManager from './listManager.js';
+import headingManager from './headingManager.js'; // Import headingManager
 
 const editor = {
     init() {
@@ -54,9 +55,30 @@ const editor = {
             });
         }
         listManager.init(this);
+        headingManager.init(this); // Initialize headingManager
     },
 
     handleKeyDown(e) {
+        // Undo/Redo handling
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) { // Ctrl+Shift+Z or Cmd+Shift+Z for redo
+                // console.log('[Editor] Redo attempt');
+                if (this.undoManager) this.undoManager.redo();
+            } else { // Ctrl+Z or Cmd+Z for undo
+                // console.log('[Editor] Undo attempt');
+                if (this.undoManager) this.undoManager.undo();
+            }
+            return; // Stop further processing for undo/redo
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { // Ctrl+Y for redo (common on Windows)
+            e.preventDefault();
+            // console.log('[Editor] Redo attempt (Ctrl+Y)');
+            if (this.undoManager) this.undoManager.redo();
+            return; // Stop further processing for redo
+        }
+
+
         if (e.key === 'Enter' || e.key === 'Backspace') {
             this.preDomSnapshot = this.editorEl.innerHTML;
             this.lastLogTrigger = e.key;
@@ -92,21 +114,25 @@ const editor = {
             if (e.key === 'Tab' && this.editorEl.contains(document.activeElement)) {
                 e.preventDefault(); 
 
-                if (listItem) { // Now listItem should be correctly identified
+                if (listItem) { 
                     const currentAnchorNode = sel.anchorNode;
                     const currentAnchorOffset = sel.anchorOffset;
+                    let operationPerformed = false;
                     
                     if (e.shiftKey) {
                         console.log('[Shift+Tab Key] Context is LI.'); // Specific log for Shift+Tab
                         console.log('[Shift+Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
                         console.log('[Shift+Tab Key] Calling listManager.handleShiftTab.');
                         listManager.handleShiftTab(listItem, currentAnchorNode, currentAnchorOffset); 
+                        // listManager.handleShiftTab should call undoManager if it makes a change
                     } else {
                         console.log('[Tab Key] Context is LI.');
                         console.log('[Tab Key] Captured for restore: Node:', currentAnchorNode, 'Offset:', currentAnchorOffset);
                         console.log('[Tab Key] Calling listManager.handleTab.');
                         listManager.handleTab(listItem, currentAnchorNode, currentAnchorOffset);
+                        // listManager.handleTab should call undoManager if it makes a change
                     }
+                    // No direct call to undoManager here; sub-modules handle it.
                     this.updateCaretDisplayAndSave(); 
                     return; 
                 } else {
@@ -170,6 +196,12 @@ const editor = {
             return;
         }
 
+        // Record state BEFORE potential transformation if input is likely to cause one
+        // This is tricky because simple typing shouldn't spam history.
+        // A better place might be *after* a transformation is confirmed.
+        // if (this.undoManager) this.undoManager.recordState('beforeInputFormattingAttempt');
+
+
         setTimeout(() => {
             let absCaretPos = this.getAbsoluteCaretPosition();
             const sel = window.getSelection();
@@ -186,10 +218,16 @@ const editor = {
             let transformationOccurred = false;
             if (blockToProcess && blockToProcess.parentNode === this.editorEl) { 
                  transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
+                 // If transformationOccurred, the specific transforming function should have called undoManager.
             }
 
             if (transformationOccurred) {
                 absCaretPos = this.getAbsoluteCaretPosition(); 
+                // The call to recordState should happen inside attemptBlockTransformations or its sub-functions
+            } else {
+                // If no transformation, but it was a significant input (e.g. space, punctuation), maybe record.
+                // This needs careful thought to avoid too many history states.
+                // For now, only record on explicit transformations.
             }
             
             this.applyFocusAndSave(absCaretPos, transformationOccurred); 
@@ -208,8 +246,9 @@ const editor = {
             let absCaretPos = this.getAbsoluteCaretPosition();
             let transformationOccurred = false;
 
-            const headingReverted = this.revertBrokenHeading();
+            const headingReverted = headingManager.checkAndRevertBrokenHeadings();
             if (headingReverted) {
+                // headingManager.checkAndRevertBrokenHeadings should call undoManager if it reverts
                 absCaretPos = this.getAbsoluteCaretPosition();
                 transformationOccurred = true;
             }
@@ -254,77 +293,39 @@ const editor = {
             return false;
         }
 
+        // Only attempt transformations on DIVs for now
         if (blockNode.tagName !== 'DIV') {
             return false;
         }
 
         const textContent = blockNode.textContent;
         
-        const headingMatch = textContent.match(/^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/);
-        if (headingMatch) {
-            let textNodeForCaret = (originalAnchorNode && originalAnchorNode.nodeType === Node.TEXT_NODE && blockNode.contains(originalAnchorNode)) 
-                                   ? originalAnchorNode 
-                                   : (blockNode.firstChild && blockNode.firstChild.nodeType === Node.TEXT_NODE ? blockNode.firstChild : null);
-            if (textNodeForCaret) {
-                 return this.transformToHeading(blockNode, headingMatch, textNodeForCaret, originalAnchorOffset);
-            }
-            return false; 
+        // Try heading transformation first
+        let transformed = headingManager.tryTransformToHeading(blockNode, textContent, originalAnchorNode, originalAnchorOffset);
+        // headingManager.tryTransformToHeading should call undoManager if successful
+        if (transformed) {
+            return true;
         }
 
+        // Try list transformation if heading transformation didn't occur
         const ulMatch = textContent.match(listManager.ulMarkerRegex);
         if (ulMatch) {
+            // listManager.convertBlockToList should call undoManager if successful
             return listManager.convertBlockToList(blockNode, ulMatch, 'ul');
         }
 
         const olMatch = textContent.match(listManager.olMarkerRegex);
         if (olMatch) {
+            // listManager.convertBlockToList should call undoManager if successful
             return listManager.convertBlockToList(blockNode, olMatch, 'ol');
         }
         
-        return false;
+        return false; // No transformation occurred
     },
 
-    transformToHeading(divBlock, match, textNodeBeingEdited, caretOffsetInTextNode) {
-        const level = match[1].length;
-        const rawBody = match[2]; 
-        const hBodyContent = '\u200B' + rawBody;
+    // transformToHeading method is now moved to headingManager.js
+    // revertBrokenHeading method is now moved to headingManager.js
 
-        const h = document.createElement(`h${level}`);
-        const markerSpan = document.createElement('span');
-        markerSpan.className = 'heading-marker';
-        markerSpan.textContent = match[1]; 
-        markerSpan.contentEditable = false;
-
-        const hTextNode = document.createTextNode(hBodyContent);
-        h.append(markerSpan, hTextNode);
-
-        divBlock.replaceWith(h);
-        console.log(`[DOM Render] Transformed DIV to H${level}.`);
-
-        const sel = window.getSelection();
-        if (sel) {
-            const matchedMarkerAndSpaceLength = match[1].length + 1; 
-            let caretOffsetInRawBody = caretOffsetInTextNode - matchedMarkerAndSpaceLength;
-            
-            caretOffsetInRawBody = Math.max(0, caretOffsetInRawBody);
-
-            let newOffsetInHTextNode = 1 + caretOffsetInRawBody; 
-            newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length);
-            newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode);
-
-            try {
-                const rng = document.createRange();
-                rng.setStart(hTextNode, newOffsetInHTextNode);
-                rng.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(rng);
-            } catch (e) {
-                h.focus(); 
-            }
-        }
-        return true;
-    },
-    
     getBlocks() {
         return Array.from(this.editorEl.children); 
     },
@@ -593,48 +594,7 @@ const editor = {
         return { start, end };
     },
 
-    revertBrokenHeading() {
-        let reverted = false;
-        for (const h of this.editorEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
-            const marker = h.querySelector('.heading-marker');
-            if (!marker) continue;
-
-            let n = marker.nextSibling;
-            while (n && n.nodeType !== Node.TEXT_NODE && n.tagName !== 'BR') {
-                n = n.nextSibling;
-            }
-
-            const isTextNode = n && n.nodeType === Node.TEXT_NODE;
-            const broken = !n ||
-                           (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') ||
-                           (isTextNode && n.data.charCodeAt(0) !== 0x200B && n.data.length > 0) || 
-                           (isTextNode && n.data.length === 0 && h.childNodes.length <=1 ); 
-
-            if (broken) {
-                const body = isTextNode ? n.data.replace(/^[\u200B]/, '') : '';
-                
-                const div = document.createElement('div');
-                div.textContent = marker.textContent + body; 
-                h.replaceWith(div);
-                console.log(`[DOM Render] Reverted H${h.tagName.substring(1)} to DIV.`);
-                reverted = true;
-
-                const tn = div.firstChild; 
-                if (tn && tn.nodeType === Node.TEXT_NODE) {
-                    const sel = window.getSelection();
-                    const rng = document.createRange();
-                    let caretPosInDiv = marker.textContent.length;
-                    caretPosInDiv = Math.min(caretPosInDiv, tn.data.length); 
-
-                    rng.setStart(tn, caretPosInDiv); 
-                    rng.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(rng);
-                }
-            }
-        }
-        return reverted;
-    },
+    // revertBrokenHeading method is now moved to headingManager.js
 }; // This should be the closing brace for the 'editor' object.
 
 export default editor;

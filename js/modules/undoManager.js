@@ -1,78 +1,90 @@
-import editor from './editor.js'; // To access editorEl and selection utils if they live there
-import utils from './utils.js'; // For getSelectionStateDetailed, restoreSelectionStateDetailed
-
 const undoManager = {
-    undoStack: [],
-    redoStack: [],
-    editorInstance: null,
+    editor: null,
+    history: [],
+    currentIndex: -1,
+    maxHistorySize: 50, // Maximum number of states to keep
 
-    init(editorInst) {
-        this.editorInstance = editorInst; // editor.js instance
-        this.undoStack = [];
-        this.redoStack = [];
+    init(editorInstance) {
+        this.editor = editorInstance;
+        // console.log('UndoManager initialized');
+        // It's crucial to record the initial state AFTER editor content is loaded.
+        // This might be called from editor.js after storage.loadSettings() or initial content setup.
     },
 
-    add(beforeState, afterState) {
-        if (!beforeState || !afterState) {
-            console.warn("UndoManager: Attempted to add invalid state.");
+    recordInitialState() {
+        if (!this.editor || !this.editor.editorEl || this.history.length > 0) return; // Only record if history is empty
+        this.recordState("initialLoad");
+        // console.log('[UndoManager] Initial state recorded.');
+    },
+
+    recordState(operationType = 'unknown') {
+        if (!this.editor || !this.editor.editorEl) return;
+
+        const currentState = this.editor.editorEl.innerHTML;
+        const currentCaret = this.editor.getAbsoluteCaretPosition();
+
+        // Avoid recording identical consecutive states
+        if (this.currentIndex >= 0 && this.history[this.currentIndex].html === currentState) {
+            // Update caret position for the current state if only caret moved
+            // this.history[this.currentIndex].caret = currentCaret; 
+            // console.log('[UndoManager] State identical, not recording.');
             return;
         }
-        this.undoStack.push({ undo: beforeState, redo: afterState });
-        this.redoStack = []; // Clear redo stack on new action
-        // console.log('UndoManager: Added state. Undo stack size:', this.undoStack.length);
+        
+        // If we are not at the end of history (i.e., after an undo), truncate future states
+        if (this.currentIndex < this.history.length - 1) {
+            this.history = this.history.slice(0, this.currentIndex + 1);
+        }
+
+        this.history.push({ html: currentState, caret: currentCaret, operation: operationType });
+        this.currentIndex++;
+
+        // Limit history size
+        if (this.history.length > this.maxHistorySize) {
+            this.history.shift(); // Remove the oldest state
+            this.currentIndex--; // Adjust current index
+        }
+        // console.log(`[UndoManager] State recorded (${operationType}). History size: ${this.history.length}, Index: ${this.currentIndex}`);
     },
 
     undo() {
-        if (this.undoStack.length === 0) {
-            // console.log('UndoManager: Undo stack empty.');
-            return false; // No undo operation performed
+        if (!this.editor || !this.editor.editorEl) return false;
+        if (this.currentIndex <= 0) { 
+            // console.log('[UndoManager] Nothing to undo or at initial state.');
+            return false;
         }
-        const state = this.undoStack.pop();
-        this.redoStack.push(state);
 
-        // console.log('UndoManager: Undoing. HTML to restore:', state.undo.html.substring(0,100));
-        this.editorInstance.editorEl.innerHTML = state.undo.html;
-        utils.restoreSelectionStateDetailed(this.editorInstance.editorEl, state.undo.selection);
-        this.editorInstance.updateCaretDisplayAndSave(false); // Update display, don't save to prevent loop
-        return true; // Undo operation performed
+        this.currentIndex--;
+        const previousState = this.history[this.currentIndex];
+        this.editor.editorEl.innerHTML = previousState.html;
+        this.editor.restoreCaret(previousState.caret);
+        // console.log(`[UndoManager] Undo performed. Index: ${this.currentIndex}`);
+        this.editor.updateCaretDisplayAndSave(); // Update display after undo
+        this.editor.applyFocusAndSave(previousState.caret, true); // Re-apply focus
+        return true;
     },
 
     redo() {
-        if (this.redoStack.length === 0) {
-            // console.log('UndoManager: Redo stack empty.');
-            return false; // No redo operation performed
+        if (!this.editor || !this.editor.editorEl) return false;
+        if (this.currentIndex >= this.history.length - 1) {
+            // console.log('[UndoManager] Nothing to redo.');
+            return false;
         }
-        const state = this.redoStack.pop();
-        this.undoStack.push(state);
 
-        // console.log('UndoManager: Redoing. HTML to restore:', state.redo.html.substring(0,100));
-        this.editorInstance.editorEl.innerHTML = state.redo.html;
-        utils.restoreSelectionStateDetailed(this.editorInstance.editorEl, state.redo.selection);
-        this.editorInstance.updateCaretDisplayAndSave(false); // Update display, don't save
-        return true; // Redo operation performed
+        this.currentIndex++;
+        const nextState = this.history[this.currentIndex];
+        this.editor.editorEl.innerHTML = nextState.html;
+        this.editor.restoreCaret(nextState.caret);
+        // console.log(`[UndoManager] Redo performed. Index: ${this.currentIndex}`);
+        this.editor.updateCaretDisplayAndSave(); // Update display after redo
+        this.editor.applyFocusAndSave(nextState.caret, true); // Re-apply focus
+        return true;
     },
 
-    clearRedoStack() {
-        if (this.redoStack.length > 0) {
-            // console.log('UndoManager: Clearing redo stack.');
-            this.redoStack = [];
-        }
-    },
-    
-    // Optional: if needed for specific scenarios
-    clearUndoStack() {
-        if (this.undoStack.length > 0) {
-            // console.log('UndoManager: Clearing undo stack.');
-            this.undoStack = [];
-        }
-    },
-
-    hasUndo() {
-        return this.undoStack.length > 0;
-    },
-
-    hasRedo() {
-        return this.redoStack.length > 0;
+    // Call this method after custom DOM transformations that should be undoable
+    handleCustomChange(operationType) {
+        // console.log(`[UndoManager] handleCustomChange called for: ${operationType}`);
+        this.recordState(operationType);
     }
 };
 

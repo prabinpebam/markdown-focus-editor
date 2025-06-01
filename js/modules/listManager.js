@@ -35,6 +35,11 @@ const listManager = {
         blockNode.replaceWith(listElement);
         console.log(`[DOM Render] Converted block to <${listType}> list.`);
 
+        // After successful DOM change:
+        if (this.editor.undoManager) {
+            this.editor.undoManager.handleCustomChange(`create${listType.toUpperCase()}List`);
+        }
+
         try {
             const sel = window.getSelection();
             const rng = document.createRange();
@@ -124,7 +129,10 @@ const listManager = {
 
         if (indented) {
             console.log('[DOM Render] List item indented. Moved LI successfully.');
-            // Defer caret placement to allow DOM to settle
+            // After successful DOM change:
+            if (this.editor.undoManager) {
+                this.editor.undoManager.handleCustomChange('listIndent');
+            }
             setTimeout(() => {
                 const sel = window.getSelection();
                 if (!sel) {
@@ -361,6 +369,10 @@ const listManager = {
 
         if (outdented) {
             console.log('[DOM Render] List item outdented. Moved LI/DIV successfully.');
+            // After successful DOM change:
+            if (this.editor.undoManager) {
+                this.editor.undoManager.handleCustomChange('listOutdent');
+            }
             setTimeout(() => {
                 const sel = window.getSelection();
                 if (!sel) {
