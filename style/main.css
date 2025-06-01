@@ -29,55 +29,89 @@ body {
     overflow: visible; /* No scrolling on editor */
 }
 
-/* Hamburger button */
-#hamburger {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    background: rgba(0, 0, 0, 0.2);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 10px 12px;
-    font-size: 18px;
-    cursor: pointer;
-    z-index: 1000;
-    transition: background-color 0.2s ease;
-}
-
-#hamburger:hover {
-    background: rgba(0, 0, 0, 0.9);
-}
-
-#hamburger.active {
-    background: rgba(0, 0, 0, 0.9);
-}
-
-/* Toolbar */
+/* Toolbar (#toolbar is now the morphing activator) */
 #toolbar {
     position: fixed;
-    top: 20px;
+    top: 40px;
     left: 50%;
-    transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 8px;
-    padding: 10px 20px;
-    display: flex;
-    gap: 10px;
+    transform: translateX(-50%); /* Center horizontally */
+    
+    /* Initial State: Circle Activator */
+    width: 30px; /* Hit area */
+    height: 30px; /* Hit area */
+    border-radius: 15px;    
+    background-color: rgba(255, 255, 255, 1);
+    backdrop-filter: blur(8px);
+    padding: 0; /* No padding when it's a dot */
+    cursor: pointer;
+    z-index: 1000;
+    display: flex; /* To help center the dot initially, and align buttons later */
     align-items: center;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    z-index: 999;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, .1);
+    justify-content: center;
+    overflow: hidden; /* Crucial for morph effect and hiding buttons */
+    transition: width 0.3s ease-in-out, height 0.3s ease-in-out, border-radius 0.3s ease-in-out, background-color 0.3s ease-in-out, padding 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
 }
 
-#toolbar.visible {
+#toolbar-activator-dot {
+    /* This is the visible red dot */
+    position: absolute; /* Positioned relative to #toolbar */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Center it */
+    width: 10px;
+    height: 10px;
+    background-color: red;
+    border-radius: 50%;
     opacity: 1;
-    visibility: visible;
+    transition: width 0.2s ease-in-out, height 0.2s ease-in-out, opacity 0.3s ease-in-out 0.1s, transform 0.3s ease-in-out 0.1s;
+    pointer-events: none; 
 }
+
+/* Hover effect on #toolbar when it's in its dot state */
+#toolbar:not(.is-toolbar-active):hover #toolbar-activator-dot {
+    width: 30px;
+    height: 30px;
+}
+
+/* Toolbar Active State (Morphed) */
+#toolbar.is-toolbar-active {
+    width: auto; 
+    min-width: auto; /* Let content define width */
+    height: auto; 
+    min-height: auto; /* Let content define height */
+    border-radius: 8px; 
+    background-color: rgba(255, 255, 255, 0.1); 
+    padding: 10px 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    overflow: visible; 
+    cursor: default;
+    justify-content: flex-start; /* Align buttons to the start when active */
+}
+
+#toolbar.is-toolbar-active #toolbar-activator-dot {
+    opacity: 0;
+    transform: scale(0) translate(-50%, -50%); /* Scale down and keep centered */
+    width: 0; 
+    height: 0;
+}
+
+/* Styling for toolbar items (buttons, separator, switch) when toolbar is active */
+#toolbar > *:not(#toolbar-activator-dot) { /* Target all direct children except the dot */
+    opacity: 0;
+    transform: scale(0.9);
+    pointer-events: none;
+    visibility: hidden;
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out, visibility 0s linear 0.2s;
+}
+
+#toolbar.is-toolbar-active > *:not(#toolbar-activator-dot) {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+    visibility: visible;
+    transition-delay: 0.15s; /* Buttons appear after toolbar expands */
+}
+
 
 #toolbar button {
     background: none;
@@ -265,13 +299,19 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
     background: rgba(255, 255, 255, 0.05);
 }
 
+/* Dark theme adjustments for #toolbar when active */
+.dark-theme #toolbar.is-toolbar-active {
+    background-color: rgba(255, 255, 255, 0.1); 
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 .dark-theme #toolbar button img {
     filter: invert(1);
-    opacity: 0.6;
+    opacity: 0.8;
 }
 
 .dark-theme #toolbar button:hover img {
-    opacity: 0.8;
+    opacity: 1;
 }
 
 .dark-theme #font-modal .content {
@@ -293,6 +333,12 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
 .light-theme {
     background-color: #f5f5f5;
     color: #333;
+}
+
+/* Light theme adjustments for #toolbar when active */
+.light-theme #toolbar.is-toolbar-active {
+    background-color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .light-theme #toolbar button img {

@@ -1,102 +1,71 @@
 import storage from './storage.js';
-import fileManager from './fileManager.js';
-import theme from './theme.js'; // Assuming theme.js handles actual theme toggling logic
-import editor from './editor.js'; // Assuming editor.js might be needed for font size application
+import editor from './editor.js';
 
 const toolbar = {
+    toolbarElement: null, // This is the #toolbar div which morphs
+    // toolbarActivatorDot: null, // Not directly manipulated by JS for its primary animation
+    isToolbarActive: false,
+
     init() {
-        this.toolbarEl = document.getElementById('toolbar');
-        this.hamburgerEl = document.getElementById('hamburger');
-        this.saveButton = document.getElementById('save');
-        this.openFileButton = document.getElementById('open-file');
-        this.fileInput = document.getElementById('file-input');
+        this.toolbarElement = document.getElementById('toolbar');
+        // this.toolbarActivatorDot = document.getElementById('toolbar-activator-dot'); // If needed
+
         this.increaseFontButton = document.getElementById('increase-font');
         this.decreaseFontButton = document.getElementById('decrease-font');
-        this.toggleThemeButton = document.getElementById('toggle-theme');
-        this.fullscreenButton = document.getElementById('fullscreen');
-        this.focusToggle = document.getElementById('focus-toggle');
-        this.editorEl = document.getElementById('editor'); // Needed for font size changes
         this.baseFontSize = 16; // Default base font size
 
-        // Hamburger menu toggle
-        if (this.hamburgerEl && this.toolbarEl) {
-            this.hamburgerEl.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent click from immediately closing via document listener
-                this.toolbarEl.classList.toggle('visible');
-                this.hamburgerEl.classList.toggle('active');
-            });
-
-            // Close toolbar if clicking outside
-            document.addEventListener('click', (e) => {
-                if (this.toolbarEl.classList.contains('visible') && !this.toolbarEl.contains(e.target) && e.target !== this.hamburgerEl) {
-                    this.toolbarEl.classList.remove('visible');
-                    this.hamburgerEl.classList.remove('active');
+        if (this.toolbarElement) {
+            this.toolbarElement.addEventListener('click', (event) => {
+                // If the toolbar is not active, a click on it should open it.
+                if (!this.isToolbarActive) {
+                    // Check if the click is on the toolbarElement itself (the 30x30 area)
+                    // and not on one of its children that might become visible later.
+                    // Since buttons are hidden when not active, this mainly ensures the 30x30 area is clicked.
+                    if (event.target === this.toolbarElement || event.target === this.toolbarElement.querySelector('#toolbar-activator-dot')) {
+                        event.stopPropagation(); 
+                        this.openToolbar();
+                    }
                 }
+                // If toolbar is active, clicks on buttons inside are handled by their own listeners.
+                // Clicks on the padding of the active toolbar should not close it here.
             });
         }
 
-        // Save button
-        if (this.saveButton) {
-            this.saveButton.addEventListener('click', () => fileManager.saveFile());
-        }
-
-        // Open file button
-        if (this.openFileButton && this.fileInput) {
-            this.openFileButton.addEventListener('click', () => this.fileInput.click());
-            this.fileInput.addEventListener('change', (event) => fileManager.handleFileOpen(event));
-        }
-        
-        // Font size controls
         if (this.increaseFontButton) {
-            this.increaseFontButton.addEventListener('click', () => this.changeFontSize(2));
+            this.increaseFontButton.addEventListener('click', (event) => {
+                event.stopPropagation(); // Prevent toolbar from closing if it's open
+                this.changeFontSize(2);
+            });
         }
         if (this.decreaseFontButton) {
-            this.decreaseFontButton.addEventListener('click', () => this.changeFontSize(-2));
-        }
-
-        // Theme toggle
-        if (this.toggleThemeButton) {
-            this.toggleThemeButton.addEventListener('click', () => theme.toggleTheme());
-        }
-
-        // Fullscreen toggle
-        if (this.fullscreenButton) {
-            this.fullscreenButton.addEventListener('click', () => this.toggleFullscreen());
-        }
-
-        // Focus mode toggle
-        if (this.focusToggle) {
-            this.focusToggle.addEventListener('change', (e) => {
-                storage.saveSettings('focusEnabled', e.target.checked);
-                // The editor module itself will react to this change if it needs to re-apply formatting
-                // For now, we assume editor.formatContent() or similar will pick up the state.
-                // Or, if editor needs to be explicitly told:
-                // editor.setFocusMode(e.target.checked); 
+            this.decreaseFontButton.addEventListener('click', (event) => {
+                event.stopPropagation(); // Prevent toolbar from closing if it's open
+                this.changeFontSize(-2);
             });
         }
+        // Add stopPropagation to other toolbar button/control event listeners if needed
 
-        // Add event listener to document to hide toolbar when clicking outside
         document.addEventListener('click', (event) => {
-            if (this.toolbarEl && this.toolbarEl.classList.contains('visible')) {
-                // Check if the click is outside the toolbar and not on the hamburger button
-                if (!this.toolbarEl.contains(event.target) && event.target !== this.hamburgerEl) {
-                    this.hideToolbar();
+            if (this.isToolbarActive && this.toolbarElement) {
+                // If toolbar is active and click is outside the toolbar element
+                if (!this.toolbarElement.contains(event.target)) {
+                    this.closeToolbar();
                 }
             }
         });
     },
 
-    toggleToolbar() {
-        if (this.toolbarEl) {
-            this.toolbarEl.classList.toggle('visible');
-            this.hamburgerEl.classList.toggle('active');
+    openToolbar() {
+        if (this.toolbarElement && !this.isToolbarActive) {
+            this.toolbarElement.classList.add('is-toolbar-active');
+            this.isToolbarActive = true;
         }
     },
 
-    hideToolbar() {
-        if (this.toolbarEl) {
-            this.toolbarEl.classList.remove('visible');
-            this.hamburgerEl.classList.remove('active');
+    closeToolbar() {
+        if (this.toolbarElement && this.isToolbarActive) {
+            this.toolbarElement.classList.remove('is-toolbar-active');
+            this.isToolbarActive = false;
         }
     },
 
@@ -116,18 +85,6 @@ const toolbar = {
             // This might be redundant if editor's CSS inherits --base-font,
             // but explicit set ensures it if editor has its own specific font-size rule.
             // editor.editorEl.style.fontSize = `${size}px`;
-        }
-    },
-
-    toggleFullscreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(err => {
-                // alert(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
         }
     }
 };

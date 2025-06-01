@@ -16,19 +16,10 @@
   <link rel="stylesheet" href="style/main.css">
 </head>
 <body>
-  <button id="hamburger">☰</button>
-
-  <!-- DEV-MODE toggle (top-right) -->
-  <label id="dev-switch" class="switch" title="Dev Mode">
-      <input type="checkbox" id="dev-toggle" checked>
-      <span class="slider"></span>
-  </label>
-  <!-- NEW absolute-caret field (0-999) -->
-  <input id="caret-pos" type="number" min="0" max="999"
-         value="0" maxlength="3" title="Caret index"
-         style="width:60px; margin-left:8px;">
-
+  <!-- New Toolbar Activator - #toolbar itself will morph -->
   <div id="toolbar">
+    <div id="toolbar-activator-dot"></div>
+    <!-- Toolbar Buttons: -->
     <button id="save" title="Save (Ctrl+S)"><img src="images/save.svg" alt="Save"></button>
     <button id="open-file" title="Open"><img src="images/open.svg" alt="Open"></button>
     <button id="increase-font" title="Increase Font Size"><img src="images/increase-font.svg" alt="Increase Font"></button>
@@ -42,6 +33,16 @@
     </label>
     <input type="file" id="file-input" accept=".txt,.md" style="display:none;">
   </div>
+
+  <!-- DEV-MODE toggle (top-right) -->
+  <label id="dev-switch" class="switch" title="Dev Mode">
+      <input type="checkbox" id="dev-toggle" checked>
+      <span class="slider"></span>
+  </label>
+  <!-- NEW absolute-caret field (0-999) -->
+  <input id="caret-pos" type="number" min="0" max="999"
+         value="0" maxlength="3" title="Caret index"
+         style="width:60px; margin-left:8px;">
 
   <div id="editor" contenteditable="true" spellcheck="false">
     <div>Welcome to Markdown-Focus-Editor: Your distraction-free markdown playground. Fire up your keyboard and let witty words turn into magic!</div>
