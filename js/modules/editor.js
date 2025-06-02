@@ -141,26 +141,31 @@ const editor = {
             const tagName = e.key.toLowerCase() === 'b' ? 'B' : 'I';
 
             const sel = window.getSelection();
+            let hadTextSelection = false;
+            
             // Trimming logic for single text node selection (if any)
             if (sel && sel.rangeCount > 0) {
                 const range = sel.getRangeAt(0);
-                if (!range.collapsed && range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-                    const textNode = range.startContainer;
-                    const fullText = textNode.nodeValue;
-                    let selStart = range.startOffset;
-                    let selEnd = range.endOffset;
-                    let currentSelectedText = fullText.substring(selStart, selEnd);
-                    const leadingSpaces = currentSelectedText.match(/^\s+/);
-                    const trailingSpaces = currentSelectedText.match(/\s+$/);
-                    if (leadingSpaces) selStart += leadingSpaces[0].length;
-                    if (trailingSpaces) selEnd -= trailingSpaces[0].length;
-                    if ((leadingSpaces || trailingSpaces) && selStart < selEnd) {
-                        const newRange = document.createRange();
-                        newRange.setStart(textNode, selStart);
-                        newRange.setEnd(textNode, selEnd);
-                        sel.removeAllRanges();
-                        sel.addRange(newRange);
-                        console.log(`[Editor] Trimmed selection for ${styleType}.`);
+                if (!range.collapsed) {
+                    hadTextSelection = true;
+                    if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+                        const textNode = range.startContainer;
+                        const fullText = textNode.nodeValue;
+                        let selStart = range.startOffset;
+                        let selEnd = range.endOffset;
+                        let currentSelectedText = fullText.substring(selStart, selEnd);
+                        const leadingSpaces = currentSelectedText.match(/^\s+/);
+                        const trailingSpaces = currentSelectedText.match(/\s+$/);
+                        if (leadingSpaces) selStart += leadingSpaces[0].length;
+                        if (trailingSpaces) selEnd -= trailingSpaces[0].length;
+                        if ((leadingSpaces || trailingSpaces) && selStart < selEnd) {
+                            const newRange = document.createRange();
+                            newRange.setStart(textNode, selStart);
+                            newRange.setEnd(textNode, selEnd);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                            console.log(`[Editor] Trimmed selection for ${styleType}.`);
+                        }
                     }
                 }
             }
@@ -247,11 +252,26 @@ const editor = {
                     if (!styledElement.nextSibling || styledElement.nextSibling.nodeValue !== '\u200B') {
                         const zwspNode = document.createTextNode('\u200B');
                         styledElement.parentNode.insertBefore(zwspNode, styledElement.nextSibling);
-                        const newRange = document.createRange();
-                        if (currentSel.rangeCount > 0 && styledElement.contains(currentSel.getRangeAt(0).endContainer) && currentSel.getRangeAt(0).endOffset > 0) {
-                            const originalRange = currentSel.getRangeAt(0);
-                            newRange.setStart(originalRange.endContainer, originalRange.endOffset);
-                        } else if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
+                        console.log(`[Editor] Added ZWSP after ${styleType} tag.`);
+                    }
+                    
+                    // Set selection based on whether there was originally selected text
+                    const newRange = document.createRange();
+                    if (hadTextSelection && styledElement.hasChildNodes()) {
+                        // If text was originally selected, select the content inside the styled element
+                        newRange.selectNodeContents(styledElement);
+                        // Position cursor at the end of the selection
+                        newRange.collapse(false);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        // Extend selection to cover the content
+                        newRange.selectNodeContents(styledElement);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        console.log(`[Editor] Selected content inside ${styleType} tag after styling.`);
+                    } else {
+                        // If no text was selected originally, just place cursor inside the tag
+                        if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
                             newRange.setStart(styledElement.lastChild, styledElement.lastChild.textContent.length);
                         } else if (styledElement.hasChildNodes()) {
                              newRange.selectNodeContents(styledElement);
@@ -262,7 +282,7 @@ const editor = {
                         newRange.collapse(true);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log(`[Editor] Added ZWSP after ${styleType} tag.`);
+                        console.log(`[Editor] Placed cursor inside ${styleType} tag.`);
                     }
                 }
                 
@@ -280,6 +300,14 @@ const editor = {
             
             const strikeTagName = 'S'; 
             const selStrike = window.getSelection();
+            let hadTextSelectionStrike = false;
+
+            if (selStrike && selStrike.rangeCount > 0) {
+                const rangeStrike = selStrike.getRangeAt(0);
+                if (!rangeStrike.collapsed) {
+                    hadTextSelectionStrike = true;
+                }
+            }
 
             // Store affected block elements before execCommand
             const affectedBlocksInfoStrike = [];
@@ -362,11 +390,23 @@ const editor = {
                     if (!styledElement.nextSibling || styledElement.nextSibling.nodeValue !== '\u200B') {
                         const zwspNode = document.createTextNode('\u200B');
                         styledElement.parentNode.insertBefore(zwspNode, styledElement.nextSibling);
-                        const newRange = document.createRange();
-                        if (currentSel.rangeCount > 0 && styledElement.contains(currentSel.getRangeAt(0).endContainer) && currentSel.getRangeAt(0).endOffset > 0) {
-                            const originalRange = currentSel.getRangeAt(0);
-                            newRange.setStart(originalRange.endContainer, originalRange.endOffset);
-                        } else if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
+                        console.log('[Editor] Added ZWSP after strikethrough tag.');
+                    }
+                    
+                    const newRange = document.createRange();
+                    if (hadTextSelectionStrike && styledElement.hasChildNodes()) {
+                        // Select content inside strikethrough element
+                        newRange.selectNodeContents(styledElement);
+                        newRange.collapse(false);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        newRange.selectNodeContents(styledElement);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        console.log('[Editor] Selected content inside strikethrough tag after styling.');
+                    } else {
+                        // Place cursor inside strikethrough element
+                        if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
                            newRange.setStart(styledElement.lastChild, styledElement.lastChild.textContent.length);
                         } else if (styledElement.hasChildNodes()) {
                              newRange.selectNodeContents(styledElement);
@@ -377,7 +417,7 @@ const editor = {
                         newRange.collapse(true);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log('[Editor] Added ZWSP after strikethrough tag.');
+                        console.log('[Editor] Placed cursor inside strikethrough tag.');
                     }
                 }
                 
