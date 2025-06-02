@@ -29,6 +29,16 @@ body {
     overflow: visible; /* No scrolling on editor */
 }
 
+/* Paragraph spacing */
+#editor div {
+    margin-top: 1.5em;
+}
+
+#editor li
+ {
+    margin-top: .6em; /* 1.3 times the line height */
+}
+
 /* Toolbar (#toolbar is now the morphing activator) */
 #toolbar {
     position: fixed;

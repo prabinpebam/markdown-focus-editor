@@ -135,6 +135,105 @@ const inlineStyleManager = {
             }
         }
         return false;
+    },
+
+    handleShortcut(event, styleName) {
+        event.preventDefault();
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+
+        let tagName;
+        switch (styleName) {
+            case 'bold': tagName = 'b'; break;
+            case 'italic': tagName = 'i'; break;
+            case 'strikethrough': tagName = 's'; break;
+            // Add bolditalic if a shortcut is defined for it
+            // case 'bolditalic': /* handle <b><i> structure */ ; break; 
+            default: return;
+        }
+
+        const range = sel.getRangeAt(0);
+        const styleElement = document.createElement(tagName);
+        const zwspNodeAfterStyle = document.createTextNode('\u200B'); // ZWSP to be placed AFTER the style tag
+
+        if (range.collapsed) {
+            // No text selected: insert e.g. <b><zwsp></b><zwsp_after>, caret inside <b> before inner ZWSP
+            const innerZwsp = document.createTextNode('\u200B');
+            styleElement.appendChild(innerZwsp);
+
+            const fragment = document.createDocumentFragment();
+            fragment.appendChild(styleElement);
+            fragment.appendChild(zwspNodeAfterStyle);
+            
+            range.insertNode(fragment);
+            
+            // Place caret inside the styleElement, at the beginning of the inner ZWSP
+            range.setStart(innerZwsp, 0);
+            range.collapse(true); 
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            // Text selected
+            const fullSelectedText = range.toString();
+            const leadingSpacesMatch = fullSelectedText.match(/^\s*/);
+            const leadingSpaces = leadingSpacesMatch ? leadingSpacesMatch[0] : '';
+            
+            const trailingSpacesMatch = fullSelectedText.match(/\s*$/);
+            const trailingSpaces = trailingSpacesMatch ? trailingSpacesMatch[0] : '';
+            
+            const coreText = fullSelectedText.substring(leadingSpaces.length, fullSelectedText.length - trailingSpaces.length);
+
+            range.deleteContents(); // Clear the original selection from the document
+
+            const fragment = document.createDocumentFragment();
+
+            if (coreText === '') {
+                // Selection was all whitespace, or empty. Behave like collapsed.
+                const innerZwsp = document.createTextNode('\u200B');
+                styleElement.appendChild(innerZwsp);
+
+                if (leadingSpaces.length > 0) { // These are all the selected spaces
+                    fragment.appendChild(document.createTextNode(leadingSpaces));
+                }
+                fragment.appendChild(styleElement);
+                fragment.appendChild(zwspNodeAfterStyle);
+                
+                range.insertNode(fragment);
+                
+                range.setStart(innerZwsp, 0); // Caret inside the empty styled element
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+            } else {
+                // Selection has non-whitespace core text
+                styleElement.textContent = coreText;
+
+                if (leadingSpaces.length > 0) {
+                    fragment.appendChild(document.createTextNode(leadingSpaces));
+                }
+                fragment.appendChild(styleElement);
+                fragment.appendChild(zwspNodeAfterStyle); // ZWSP after the style element
+                if (trailingSpaces.length > 0) {
+                    fragment.appendChild(document.createTextNode(trailingSpaces));
+                }
+
+                range.insertNode(fragment);
+
+                // Re-select the content *inside* the styleElement (the coreText)
+                sel.removeAllRanges();
+                range.selectNodeContents(styleElement);
+                sel.addRange(range);
+            }
+        }
+
+        if (this.editor && this.editor.undoManager) {
+            this.editor.undoManager.handleCustomChange(`shortcut_${styleName}`);
+        }
+        if (this.editor) {
+            this.editor.updateCaretDisplayAndSave(); 
+        }
+        console.log(`[InlineStyle] Applied shortcut for ${styleName}.`);
     }
 };
 
