@@ -89,7 +89,8 @@ const editor = {
         this.editorEl.addEventListener('paste', this.boundHandlePaste); // Add paste listener
         
         this.editorEl.addEventListener('input', () => {
-            if (this.isSelecting) return; 
+            // if (this.isSelecting) return; // This check might be too broad if selection is cleared by typing.
+                                        // Let's rely on selection state within handleInputFormatting.
             if (!this.lastLogTrigger) {
                 this.lastLogTrigger = 'input';
             }
@@ -132,27 +133,259 @@ const editor = {
             return; 
         }
 
-        // Browser default inline styles (Ctrl+B, Ctrl+I)
-        // We want to augment this, not just prevent it.
-        // The tech-detail asks for specific HTML (**<b>...</b>**)
-        // This might require intercepting and re-implementing or post-processing.
-        // For now, let's focus on the typed markdown syntax.
-        // The inlineStyleManager will handle typed syntax.
-        // For Ctrl+B/I, we might need to let browser do its thing then clean up,
-        // or fully intercept if browser default is not <b> or <i>.
+        // Enhanced Ctrl+B and Ctrl+I handling
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key.toLowerCase() === 'b' || e.key.toLowerCase() === 'i')) {
+            e.preventDefault(); // Take full control
+            
+            const styleType = e.key.toLowerCase() === 'b' ? 'bold' : 'italic';
+            const tagName = e.key.toLowerCase() === 'b' ? 'B' : 'I';
 
-        // Inline style shortcuts
-        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
-            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'bold');
-            return;
+            const sel = window.getSelection();
+            // Trimming logic for single text node selection (if any)
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                if (!range.collapsed && range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+                    const textNode = range.startContainer;
+                    const fullText = textNode.nodeValue;
+                    let selStart = range.startOffset;
+                    let selEnd = range.endOffset;
+                    let currentSelectedText = fullText.substring(selStart, selEnd);
+                    const leadingSpaces = currentSelectedText.match(/^\s+/);
+                    const trailingSpaces = currentSelectedText.match(/\s+$/);
+                    if (leadingSpaces) selStart += leadingSpaces[0].length;
+                    if (trailingSpaces) selEnd -= trailingSpaces[0].length;
+                    if ((leadingSpaces || trailingSpaces) && selStart < selEnd) {
+                        const newRange = document.createRange();
+                        newRange.setStart(textNode, selStart);
+                        newRange.setEnd(textNode, selEnd);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                        console.log(`[Editor] Trimmed selection for ${styleType}.`);
+                    }
+                }
+            }
+            
+            // Store affected block elements before execCommand
+            const affectedBlocksInfo = [];
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                if (!range.collapsed) {
+                    this.getBlocks().forEach(block => {
+                        if (range.intersectsNode(block)) {
+                            const isEffectivelyEmpty = block.innerHTML.trim().toLowerCase() === '<br>' || block.textContent.trim() === '';
+                            affectedBlocksInfo.push({ element: block, wasEffectivelyEmpty: isEffectivelyEmpty, originalHTML: block.innerHTML });
+                        }
+                    });
+                }
+            }
+
+            document.execCommand(styleType, false, null);
+
+            setTimeout(() => {
+                // Cleanup effectively empty blocks that got styled
+                affectedBlocksInfo.forEach(info => {
+                    if (info.wasEffectivelyEmpty) {
+                        const styleTag = info.element.querySelector(tagName); 
+                        if (styleTag && styleTag.parentElement === info.element) {
+                            const styleTagContent = styleTag.innerHTML.trim().toLowerCase();
+                            if (styleTagContent === '<br>' || styleTag.textContent.trim() === '') {
+                                info.element.innerHTML = info.originalHTML;
+                                console.log('[Editor] Cleaned up styled empty block:', info.element);
+                            }
+                        } else if (info.element.textContent.trim() === '' && info.element.querySelector(tagName)) {
+                            info.element.innerHTML = info.originalHTML;
+                            console.log('[Editor] Cleaned up styled empty block (no text):', info.element);
+                        }
+                    }
+                });
+
+                const currentSel = window.getSelection();
+                if (!currentSel || !currentSel.anchorNode) {
+                    if (this.undoManager) this.undoManager.handleCustomChange(`style_${styleType}_with_ZWSP`);
+                    this.updateCaretDisplayAndSave();
+                    return;
+                }
+
+                let styledElement = null;
+                let anchor = currentSel.anchorNode;
+                let focus = currentSel.focusNode;
+
+                let current = focus;
+                while(current && current !== this.editorEl) {
+                    if (current.nodeType === Node.ELEMENT_NODE && current.tagName === tagName) {
+                        let parentBlock = current;
+                        while(parentBlock && parentBlock.parentNode !== this.editorEl) parentBlock = parentBlock.parentNode;
+                        const blockInfo = affectedBlocksInfo.find(bi => bi.element === parentBlock);
+                        if (!(blockInfo && blockInfo.wasEffectivelyEmpty && parentBlock.innerHTML === blockInfo.originalHTML)) {
+                             if (current.contains(focus) || current === focus || (current.parentNode && current.parentNode.contains(focus))) {
+                                styledElement = current;
+                                break;
+                            }
+                        }
+                    }
+                    current = current.parentNode;
+                }
+                if (!styledElement) {
+                    current = anchor;
+                     while(current && current !== this.editorEl) {
+                        if (current.nodeType === Node.ELEMENT_NODE && current.tagName === tagName) {
+                            let parentBlock = current;
+                            while(parentBlock && parentBlock.parentNode !== this.editorEl) parentBlock = parentBlock.parentNode;
+                            const blockInfo = affectedBlocksInfo.find(bi => bi.element === parentBlock);
+                            if (!(blockInfo && blockInfo.wasEffectivelyEmpty && parentBlock.innerHTML === blockInfo.originalHTML)) {
+                                if (current.contains(anchor) || current === anchor || (current.parentNode && current.parentNode.contains(anchor))) {
+                                    styledElement = current;
+                                    break;
+                                }
+                            }
+                        }
+                        current = current.parentNode;
+                    }
+                }
+
+                if (styledElement) {
+                    if (!styledElement.nextSibling || styledElement.nextSibling.nodeValue !== '\u200B') {
+                        const zwspNode = document.createTextNode('\u200B');
+                        styledElement.parentNode.insertBefore(zwspNode, styledElement.nextSibling);
+                        const newRange = document.createRange();
+                        if (currentSel.rangeCount > 0 && styledElement.contains(currentSel.getRangeAt(0).endContainer) && currentSel.getRangeAt(0).endOffset > 0) {
+                            const originalRange = currentSel.getRangeAt(0);
+                            newRange.setStart(originalRange.endContainer, originalRange.endOffset);
+                        } else if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
+                            newRange.setStart(styledElement.lastChild, styledElement.lastChild.textContent.length);
+                        } else if (styledElement.hasChildNodes()) {
+                             newRange.selectNodeContents(styledElement);
+                             newRange.collapse(false); 
+                        } else { 
+                            newRange.setStart(styledElement, 0); 
+                        }
+                        newRange.collapse(true);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        console.log(`[Editor] Added ZWSP after ${styleType} tag.`);
+                    }
+                }
+                
+                if (this.undoManager) {
+                    this.undoManager.handleCustomChange(`style_${styleType}_with_ZWSP`);
+                }
+                this.updateCaretDisplayAndSave();
+            }, 0);
+            return; // Ctrl+B/I handled
         }
-        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
-            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'italic');
-            return;
-        }
-        // Using Ctrl+Shift+S for strikethrough as Ctrl+S is save
+
+        // Ctrl+Shift+S for strikethrough
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
-            if (this.inlineStyleManager) this.inlineStyleManager.handleShortcut(e, 'strikethrough');
+            e.preventDefault(); 
+            
+            const strikeTagName = 'S'; 
+            const selStrike = window.getSelection();
+
+            // Store affected block elements before execCommand
+            const affectedBlocksInfoStrike = [];
+            if (selStrike && selStrike.rangeCount > 0) {
+                const rangeStrike = selStrike.getRangeAt(0);
+                if (!rangeStrike.collapsed) {
+                    this.getBlocks().forEach(block => {
+                        if (rangeStrike.intersectsNode(block)) {
+                            const isEffectivelyEmpty = block.innerHTML.trim().toLowerCase() === '<br>' || block.textContent.trim() === '';
+                            affectedBlocksInfoStrike.push({ element: block, wasEffectivelyEmpty: isEffectivelyEmpty, originalHTML: block.innerHTML });
+                        }
+                    });
+                }
+            }
+            
+            document.execCommand('strikethrough', false, null);
+
+            setTimeout(() => {
+                affectedBlocksInfoStrike.forEach(info => {
+                    if (info.wasEffectivelyEmpty) {
+                        const styleTag = info.element.querySelector(strikeTagName) || info.element.querySelector('STRIKE');
+                        if (styleTag && styleTag.parentElement === info.element) {
+                            const styleTagContent = styleTag.innerHTML.trim().toLowerCase();
+                            if (styleTagContent === '<br>' || styleTag.textContent.trim() === '') {
+                                info.element.innerHTML = info.originalHTML;
+                                console.log('[Editor] Cleaned up styled empty block (strikethrough):', info.element);
+                            }
+                        } else if (info.element.textContent.trim() === '' && info.element.querySelector(strikeTagName)) {
+                             info.element.innerHTML = info.originalHTML;
+                             console.log('[Editor] Cleaned up styled empty block (strikethrough, no text):', info.element);
+                        }
+                    }
+                });
+
+                const currentSel = window.getSelection();
+                if (!currentSel || !currentSel.anchorNode) {
+                    if (this.undoManager) this.undoManager.handleCustomChange('style_strikethrough_with_ZWSP');
+                    this.updateCaretDisplayAndSave();
+                    return;
+                }
+
+                let styledElement = null;
+                let anchor = currentSel.anchorNode;
+                let focus = currentSel.focusNode;
+
+                let current = focus;
+                while(current && current !== this.editorEl) {
+                    if (current.nodeType === Node.ELEMENT_NODE && (current.tagName === strikeTagName || current.tagName === 'STRIKE')) {
+                        let parentBlock = current;
+                        while(parentBlock && parentBlock.parentNode !== this.editorEl) parentBlock = parentBlock.parentNode;
+                        const blockInfo = affectedBlocksInfoStrike.find(bi => bi.element === parentBlock);
+                        if (!(blockInfo && blockInfo.wasEffectivelyEmpty && parentBlock.innerHTML === blockInfo.originalHTML)) {
+                             if (current.contains(focus) || current === focus || (current.parentNode && current.parentNode.contains(focus))) {
+                                styledElement = current;
+                                break;
+                            }
+                        }
+                    }
+                    current = current.parentNode;
+                }
+                 if (!styledElement) { 
+                    current = anchor;
+                    while(current && current !== this.editorEl) {
+                        if (current.nodeType === Node.ELEMENT_NODE && (current.tagName === strikeTagName || current.tagName === 'STRIKE')) {
+                            let parentBlock = current;
+                            while(parentBlock && parentBlock.parentNode !== this.editorEl) parentBlock = parentBlock.parentNode;
+                            const blockInfo = affectedBlocksInfoStrike.find(bi => bi.element === parentBlock);
+                            if (!(blockInfo && blockInfo.wasEffectivelyEmpty && parentBlock.innerHTML === blockInfo.originalHTML)) {
+                                if (current.contains(anchor) || current === anchor || (current.parentNode && current.parentNode.contains(anchor))) {
+                                    styledElement = current;
+                                    break;
+                                }
+                            }
+                        }
+                        current = current.parentNode;
+                    }
+                }
+                
+                if (styledElement) {
+                    if (!styledElement.nextSibling || styledElement.nextSibling.nodeValue !== '\u200B') {
+                        const zwspNode = document.createTextNode('\u200B');
+                        styledElement.parentNode.insertBefore(zwspNode, styledElement.nextSibling);
+                        const newRange = document.createRange();
+                        if (currentSel.rangeCount > 0 && styledElement.contains(currentSel.getRangeAt(0).endContainer) && currentSel.getRangeAt(0).endOffset > 0) {
+                            const originalRange = currentSel.getRangeAt(0);
+                            newRange.setStart(originalRange.endContainer, originalRange.endOffset);
+                        } else if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
+                           newRange.setStart(styledElement.lastChild, styledElement.lastChild.textContent.length);
+                        } else if (styledElement.hasChildNodes()) {
+                             newRange.selectNodeContents(styledElement);
+                             newRange.collapse(false);
+                        } else {
+                            newRange.setStart(styledElement, 0);
+                        }
+                        newRange.collapse(true);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(newRange);
+                        console.log('[Editor] Added ZWSP after strikethrough tag.');
+                    }
+                }
+                
+                if (this.undoManager) {
+                    this.undoManager.handleCustomChange('style_strikethrough_with_ZWSP');
+                }
+                this.updateCaretDisplayAndSave();
+            }, 0);
             return;
         }
 
@@ -286,29 +519,24 @@ const editor = {
         // At this point, the selection is usually collapsed.
         
         // Let's rely on the selection state at the moment the input event fires.
-        const selection = window.getSelection();
-        if (selection && !selection.isCollapsed) {
+        const currentSelection = window.getSelection();
+        // if (currentSelection && !currentSelection.isCollapsed) {
             // If there's an active, non-collapsed selection (e.g., user selected text and typed over it),
-            // then maybe skip custom inline formatting for now, or handle it differently.
-            // For this specific request, inline formatting is on first char typed.
-            // If user types over a selection, the "first char" logic might be complex.
-            // For now, let's allow it to proceed and see. The inlineStyleManager checks the text node content.
-        }
+            // the browser handles deleting the selection and inserting the new char.
+            // This is a valid input scenario we want to capture for undo.
+        // }
 
 
         if (this.devToggle && !this.devToggle.checked) {
-            this.updateCaretDisplayAndSave(); // No DOM change, just update display
-            return;
+            // Even if dev mode is off, if an input happened, we might need to record it for undo.
+            // However, custom transformations are skipped.
+            // Let the setTimeout run to record the state if no transformation would have occurred.
         }
 
         // Capture caret position *before* any potential transformation
         const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
 
         setTimeout(() => {
-            // Note: absCaretPos is captured outside setTimeout to reflect state *before* input processing.
-            // If a transformation occurs, the caret might be programmatically set by the transforming module.
-            // editor.restoreCaret(absCaretPosBeforeTransform) is a fallback if modules don't set it precisely.
-
             const sel = window.getSelection();
             let blockToProcess = null; 
             let textNodeForInline = null; 
@@ -319,7 +547,12 @@ const editor = {
                 while (blockToProcess && blockToProcess.parentNode !== this.editorEl) {
                     blockToProcess = blockToProcess.parentNode;
                 }
-                if (blockToProcess === this.editorEl) blockToProcess = sel.anchorNode.childNodes[sel.anchorOffset] || sel.anchorNode.lastChild;
+                if (blockToProcess === this.editorEl && sel.anchorNode !== this.editorEl) { // If caret is in a child of editor directly
+                    blockToProcess = sel.anchorNode.childNodes[sel.anchorOffset] || sel.anchorNode.lastChild || sel.anchorNode;
+                } else if (blockToProcess === this.editorEl && sel.anchorNode === this.editorEl) { // Caret directly in editor (empty or between blocks)
+                     blockToProcess = this.editorEl.childNodes[sel.anchorOffset] || this.editorEl.lastChild;
+                }
+
 
                 if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
                     textNodeForInline = sel.anchorNode;
@@ -328,29 +561,32 @@ const editor = {
             }
 
             let transformationOccurred = false;
-            if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
-                 transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
+            // Only run transformations if dev mode is on (or if certain transformations are always on)
+            if (!this.devToggle || this.devToggle.checked) {
+                if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
+                     transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
+                }
+
+                if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
+                    transformationOccurred = this.inlineStyleManager.checkAndApplyInlineStyles(textNodeForInline, offsetInTextNode);
+                }
             }
 
-            if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
-                // For inline styles, the inlineStyleManager should handle precise caret placement.
-                // The transformationOccurred flag is set if it makes a change.
-                transformationOccurred = this.inlineStyleManager.checkAndApplyInlineStyles(textNodeForInline, offsetInTextNode);
+            // If no custom transformation happened, it means the browser handled the input.
+            // Record this state for our undo manager.
+            // This will cover typing, simple backspace/delete, enter in plain divs, etc.
+            if (!transformationOccurred && this.undoManager) {
+                this.undoManager.handleCustomChange('textInput'); 
+                // console.log('[Editor] Recorded state for generic textInput via undoManager.');
             }
+            // Note: Custom transformations (headings, lists, inline styles from markdown)
+            // should call undoManager.handleCustomChange() within their respective modules.
+            // Ctrl+B/I/S shortcuts also call it directly.
 
             if (transformationOccurred) {
-                // If a transformation happened, the specific module (block or inline)
-                // should have ideally placed the caret correctly.
-                // A general restoreCaret might be too broad if the caret was already set precisely.
-                // However, if the transformation involved replacing a whole block,
-                // restoring based on absolute position might be necessary.
-                // For now, let's assume modules handle their caret.
-                // If issues persist, we might need a more nuanced restoreCaret call.
-                // The main point is that applyFocusAndSave will use the *current* caret after transformation.
-                this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true); // Pass true for transformationOccurred
+                this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true); 
             } else {
-                // No transformation, browser handled caret.
-                this.applyFocusAndSave(absCaretPosBeforeTransform, false); // Pass false
+                this.applyFocusAndSave(absCaretPosBeforeTransform, false); 
             }
             this.lastLogTrigger = null;
         }, 0);
@@ -366,14 +602,22 @@ const editor = {
         const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
 
         setTimeout(() => {
-            let transformationOccurred = false; // Renamed from headingReverted for clarity
+            let transformationOccurred = false; 
 
-            const headingWasReverted = headingManager.checkAndRevertBrokenHeadings();
-            if (headingWasReverted) {
-                // headingManager should have placed the caret correctly.
-                transformationOccurred = true;
+            // Only run if dev mode is on (or if certain checks are always on)
+            if (!this.devToggle || this.devToggle.checked) {
+                const headingWasReverted = headingManager.checkAndRevertBrokenHeadings();
+                if (headingWasReverted) {
+                    // headingManager.checkAndRevertBrokenHeadings should call undoManager.handleCustomChange
+                    transformationOccurred = true;
+                }
             }
             
+            // If a heading was reverted, it's a transformation.
+            // If not, this path doesn't typically involve other direct browser inputs
+            // that haven't already been caught by the 'input' event.
+            // So, no explicit undoManager call here unless a new type of transformation is added.
+
             if (transformationOccurred) {
                 this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true);
             } else {

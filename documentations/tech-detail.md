@@ -230,13 +230,14 @@ that means
 Similar behavior for the other styles.
 
 For style with md syntax
-- The moment user types "**(any character other than space)"
-   - **<b>(whatever character the user typed)</b>** should be immediately created with the curson position preserved after the character.
+- The moment user types "**(any character other than space & *)"
+   - **<b>(whatever character the user typed)</b>** should be immediately created with the cursor position preserved after the character.
 
-- The moment user types "*(any character other than space)"
-   - *<i>(whatever character the user typed)</i>* should be immediately created with the curson position preserved after the character.
+- The moment user types "*(any character other than space & *)"
+   - *<i>(whatever character the user typed)</i>* should be immediately created with the cursor position preserved after the character.
 
 - The moment user types "~~(any character other than space)"
-   - ~~<s>(whatever character the user typed)</s>~~ should be immediately created with the curson position preserved after the character.
+   - ~~<s>(whatever character the user typed)</s>~~ should be immediately created with the cursor position preserved after the character.
 
-
+- The moment user types "***(any character other than space)"
+   - ***<b><i>(whatever character the user typed)</i></b>*** should be immediately created with the cursor position preserved after the character.
