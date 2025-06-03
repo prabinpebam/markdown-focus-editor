@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Markdown Focus Mode</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: sans-serif;
+    }
+    .editor-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+      overflow: auto;
+    }
+    #editor {
+      position: relative;
+      z-index: 1;
+      padding: 20px;
+      outline: none;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      opacity: 0.3;
+    }
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .line {
+      opacity: 1;
+    }
+    .overlay-line {
+      position: absolute;
+      white-space: pre-wrap;
+      margin: 0;
+      padding: 0;
+    }
+    .focus-line {
+      opacity: 1;
+      background-color: rgba(255, 255, 255, 0.05);
+      border-radius: 2px;
+    }
+    .line-text {
+      position: absolute;
+      white-space: pre-wrap;
+    }
+    .line-current {
+      /* Current line styles */
+    }
+    .line-above, .line-below {
+      /* Adjacent line styles */
+    }
+    .line-highlight {
+      position: absolute;
+    }
+  </style>
+</head>
+<body>
+  <div class="editor-wrapper" id="editorWrapper">
+    <div id="editor" contenteditable="true">
+      <div class="line"># Heading 1</div>
+      <div class="line">Some introductory text.</div>
+      <div class="line">- List item 1</div>
+      <div class="line">- <b>Bold</b> list item 2</div>
+      <div class="line">- List item with <i>italic</i> text</div>
+      <div class="line">Some more content with <s>strikethrough</s> text.</div>
+      <div class="line">Another paragraph to <span style="color: #ff9900;">test focus mode</span> with styling.</div>
+      <span style="color: rgb(224, 224, 224); font-family: &quot;Roboto Mono&quot;, monospace; font-size: 16px;">Manipur (/ˌmʌnɪˈpʊər/)[7] is a state in northeastern India with Imphal as its capital. It borders the Indian states of Assam to the west, Mizoram to the south, and Nagaland to the north and shares the international border with Myanmar, specifically the Sagaing Region to the east and Chin State to the southeast. Covering an area of 8,621 square miles (22,330 km²), the state consists mostly of hilly terrain with the 700-square-mile Imphal Valley inhabited by the Meitei (Manipuri) community, historically a kingdom.</span>
+    </div>
+    <div id="overlay"></div>
+  </div>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const overlay = document.getElementById('overlay');
+    const wrapper = document.getElementById('editorWrapper');
+
+    function getVisualLines() {
+      // Get the caret position
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return [];
+
+      const range = selection.getRangeAt(0).cloneRange();
+      range.collapse(true);
+      
+      // Get the rect of the caret position
+      const caretRect = range.getClientRects()[0];
+      if (!caretRect) return [];
+      
+      // Find active visual line based on Y position
+      const caretY = caretRect.top;
+      const editorStyles = window.getComputedStyle(editor);
+      const lineHeight = parseInt(editorStyles.lineHeight) || parseInt(editorStyles.fontSize) * 1.5;
+      
+      // Increase the tolerance to better detect lines
+      const tolerance = lineHeight * 0.75;
+      
+      // Find all the lines by Y position
+      const allLinePositions = new Map(); // Map of Y position -> array of rects
+      
+      // Find all text nodes in the editor
+      const textNodes = [];
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode;
+        const text = textNode.nodeValue;
+        
+        // Skip empty text nodes
+        if (!text.trim()) continue;
+        
+        // Get the range for the entire text node
+        const nodeRange = document.createRange();
+        nodeRange.selectNodeContents(textNode);
+        
+        // Check all characters to determine line boundaries
+        for (let i = 0; i < text.length; i++) {
+          const charRange = document.createRange();
+          charRange.setStart(textNode, i);
+          charRange.setEnd(textNode, i + 1);
+          
+          const rects = charRange.getClientRects();
+          if (rects.length > 0) {
+            const rect = rects[0];
+            const roundedTop = Math.round(rect.top / tolerance) * tolerance;
+            
+            if (!allLinePositions.has(roundedTop)) {
+              allLinePositions.set(roundedTop, []);
+            }
+            
+            allLinePositions.get(roundedTop).push({
+              rect: rect,
+              node: textNode,
+              startOffset: i,
+              endOffset: i + 1
+            });
+          }
+        }
+      }
+      
+      // Convert the map to an array of lines sorted by Y position
+      const allLines = Array.from(allLinePositions.entries())
+        .map(([yPos, rects]) => ({ 
+          yPos, 
+          rects,
+          distance: Math.abs(yPos - caretY) 
+        }))
+        .sort((a, b) => a.yPos - b.yPos);
+
+      // Find the current line (closest to caret)
+      const currentLineIndex = allLines.findIndex(line => 
+        Math.abs(line.yPos - caretY) < tolerance);
+      
+      if (currentLineIndex === -1) return [];
+      
+      // Get current line and adjacent lines
+      const result = [];
+      
+      // Current line
+      const currentLine = allLines[currentLineIndex];
+      result.push(createVisualLine(currentLine.rects, 'current'));
+      
+      // Line above
+      if (currentLineIndex > 0) {
+        const aboveLine = allLines[currentLineIndex - 1];
+        result.push(createVisualLine(aboveLine.rects, 'above'));
+      }
+      
+      // Line below
+      if (currentLineIndex < allLines.length - 1) {
+        const belowLine = allLines[currentLineIndex + 1];
+        result.push(createVisualLine(belowLine.rects, 'below'));
+      }
+      
+      return result;
+    }
+
+    function createVisualLine(rects, type) {
+      if (!rects.length) return null;
+      
+      // Sort rects from left to right
+      rects.sort((a, b) => a.rect.left - b.rect.left);
+      
+      // Calculate the position and dimensions
+      const firstRect = rects[0].rect;
+      const lastRect = rects[rects.length - 1].rect;
+      const top = firstRect.top;
+      const left = firstRect.left;
+      const width = lastRect.right - firstRect.left;
+      const height = firstRect.height;
+      
+      // Create Range that spans the entire line
+      const lineRange = document.createRange();
+      lineRange.setStart(rects[0].node, rects[0].startOffset);
+      lineRange.setEnd(rects[rects.length - 1].node, rects[rects.length - 1].endOffset);
+      
+      return {
+        top: top,
+        left: left,
+        width: width,
+        height: height,
+        range: lineRange,
+        type: type
+      };
+    }
+
+    function renderOverlay() {
+      // Clear previous overlay content
+      overlay.innerHTML = '';
+      
+      // Get exact editor dimensions and position
+      const editorRect = editor.getBoundingClientRect();
+      const wrapperRect = wrapper.getBoundingClientRect();
+      
+      // Set overlay position to match editor
+      overlay.style.position = 'absolute';
+      overlay.style.top = `${editorRect.top - wrapperRect.top - 2}px`; // Apply the -2px fix
+      overlay.style.left = `${editorRect.left - wrapperRect.left}px`;
+      overlay.style.width = `${editorRect.width}px`;
+      overlay.style.height = `${editorRect.height}px`;
+      overlay.style.padding = getComputedStyle(editor).padding;
+      
+      // Get visual lines
+      const visualLines = getVisualLines();
+      
+      // Debug info
+      console.log('Visual lines detected:', visualLines.map(line => line.type));
+      
+      // Render each line
+      visualLines.forEach(lineInfo => {
+        // Create highlight background element
+        const highlight = document.createElement('div');
+        highlight.className = `overlay-line line-highlight line-${lineInfo.type}`;
+        
+        // Position without inline styles where possible
+        highlight.style.top = `${lineInfo.top - editorRect.top}px`;
+        highlight.style.left = `${lineInfo.left - editorRect.left}px`;
+        highlight.style.width = `${lineInfo.width}px`;
+        highlight.style.height = `${lineInfo.height}px`;
+        
+        if (lineInfo.type === 'current') {
+          highlight.classList.add('focus-line');
+        }
+        
+        overlay.appendChild(highlight);
+        
+        // Clone the contents of the range for text display
+        if (lineInfo.range) {
+          try {
+            const contents = lineInfo.range.cloneContents();
+            
+            // Create a container for the full text content
+            const textContainer = document.createElement('div');
+            textContainer.className = `line-text line-${lineInfo.type}`;
+            textContainer.appendChild(contents);
+            
+            textContainer.style.top = `${lineInfo.top - editorRect.top}px`;
+            textContainer.style.left = `${lineInfo.left - editorRect.left}px`;
+            
+            // Copy styles from the source nodes
+            const parentNodes = new Set();
+            let node = lineInfo.range.startContainer;
+            while (node && node !== editor) {
+              parentNodes.add(node.nodeType === 3 ? node.parentNode : node);
+              node = node.parentNode;
+            }
+            
+            // Apply all parent styles that might affect text rendering
+            parentNodes.forEach(parentNode => {
+              if (parentNode && parentNode.nodeType === 1) {  // Element node
+                const style = window.getComputedStyle(parentNode);
+                textContainer.style.fontFamily = style.fontFamily || textContainer.style.fontFamily;
+                textContainer.style.fontSize = style.fontSize || textContainer.style.fontSize;
+                textContainer.style.fontWeight = style.fontWeight || textContainer.style.fontWeight;
+                textContainer.style.fontStyle = style.fontStyle || textContainer.style.fontStyle;
+                textContainer.style.lineHeight = style.lineHeight || textContainer.style.lineHeight;
+                textContainer.style.letterSpacing = style.letterSpacing || textContainer.style.letterSpacing;
+                textContainer.style.textDecoration = style.textDecoration || textContainer.style.textDecoration;
+                textContainer.style.color = style.color || textContainer.style.color;
+              }
+            });
+            
+            overlay.appendChild(textContainer);
+          } catch (e) {
+            console.error("Error cloning range contents:", e);
+          }
+        }
+      });
+    }
+
+    editor.addEventListener('input', renderOverlay);
+    editor.addEventListener('click', renderOverlay);
+    editor.addEventListener('keyup', renderOverlay);
+
+    window.addEventListener('resize', renderOverlay);
+    document.fonts?.ready.then(renderOverlay);
+    window.onload = renderOverlay;
+    
+    // Re-render when the selection changes
+    document.addEventListener('selectionchange', renderOverlay);
+  </script>
+</body>
+</html>
