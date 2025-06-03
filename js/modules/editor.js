@@ -6,6 +6,9 @@ import headingManager from './headingManager.js';
 // inlineStyleManager is assigned by app.js
 
 const editor = {
+    /* ──────────────────────────────────────────────────────────────
+       Focus-mode support removed
+    ──────────────────────────────────────────────────────────────*/
     // Define methods that will be bound in init first
     handlePaste(e) {
         e.preventDefault();
@@ -532,8 +535,8 @@ const editor = {
             this.isSelecting = false;
         }
 
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey) {
-            this.updateCaretDisplayAndSave(); 
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'].includes(e.key) && !e.shiftKey) {
+            this.updateCaretDisplayAndSave();
             return;
         }
         // For other keys, or if selection is not collapsed, proceed to post-action formatting.
@@ -541,8 +544,7 @@ const editor = {
     },
     
     handleClick() {
-        // A click typically collapses selection.
-        this.isSelecting = false; 
+        this.isSelecting = false;
         this.boundHandlePotentialPostActionFormatting();
     },
 
@@ -667,42 +669,6 @@ const editor = {
             this.preDomSnapshot = null;
             this.lastLogTrigger = null;
         }, 0); 
-    },
-
-    applyFocusAndSave(currentAbsoluteCaretPos, transformationDidOccur) {
-        const focusToggle = document.getElementById('focus-toggle');
-        if (focusToggle && focusToggle.checked) {
-            const text = this.editorEl.innerText;
-            // Use currentAbsoluteCaretPos which reflects the caret after any transformation
-            const focusRange = this.calculateFocusRange(text, currentAbsoluteCaretPos);
-            this.applyFocusFormatting(focusRange);
-        }
-        
-        // The decision to call restoreCaret is now removed from here.
-        // Modules that transform the DOM are responsible for setting the caret.
-        // If a general restore was needed, it would be based on absCaretPos *before* transform,
-        // and only if transformationDidOccur.
-        // For now, we trust modules to set caret. If not, this is where a fallback restore would go.
-        // if (transformationDidOccur) {
-        //     // This might be needed if modules don't precisely place the caret after major DOM changes.
-        //     // this.restoreCaret(absCaretPosBeforeTransform); // Using the position *before* the change.
-        // }
-
-        this.updateCaretDisplayAndSave(); // This always reads the *current* caret position.
-    },
-    
-    updateCaretDisplayAndSave() {
-        if (this.caretInput) {
-            // Ensure getAbsoluteCaretPosition is robust before updating
-            try {
-                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
-            } catch (e) {
-                // Silently fail or log minimally if caret position can't be determined
-            }
-        }
-        if (this.editorEl) {
-            storage.saveSettings('lastContent', this.editorEl.innerHTML);
-        }
     },
 
     attemptBlockTransformations(blockNode, originalAnchorNode, originalAnchorOffset) {
@@ -965,53 +931,40 @@ const editor = {
                 sel.removeAllRanges();
                 sel.addRange(rng);
             } catch (e) {
-                if(targetBlock) targetBlock.focus(); 
+                // fallback – at least focus the block
+                if (targetBlock) targetBlock.focus();
             }
         } else if (targetBlock) {
-            targetBlock.focus(); // Fallback: focus the block if no text node found
+            targetBlock.focus(); // Fallback if no text node found
         }
     },
 
-    applyFocusFormatting(focusRange) {
-        const blocks = this.getBlocks();
-        let run = 0;
-        for (const el of blocks) {
-            const len = (el.innerText || '').length; // Use innerText for opacity as it reflects visible text
-            const inRange =
-                run + len >= focusRange.start &&   
-                run <= focusRange.end;
-            el.style.opacity = inRange ? '0.9' : '0.3';
-            run += len + 1;                        
-        }
+    /* ------------------------------------------------------------
+      Focus-mode was removed; some code still calls this helper.
+      Provide a no-op stub that only keeps persistence in sync.
+    ------------------------------------------------------------ */
+    applyFocusAndSave(/* currentAbsoluteCaretPos, transformationDidOccur */) {
+        // In the old implementation this also applied opacity changes.
+        // Now we just persist the editor state.
+        this.updateCaretDisplayAndSave();
     },
 
-    calculateFocusRange(text, caretPos) {
-        const terminatorRegex = /[.!?…]/;
-        let start = 0, end = text.length;
-        let count = 0;
-        for (let i = caretPos - 1; i >= 0; i--) {
-            if (terminatorRegex.test(text.charAt(i))) {
-                count++;
-                if (count === 2) {
-                    start = i + 1;
-                    break;
-                }
-            }
+    /* ------------------------------------------------------------
+      Utility: show caret index in #caret-pos and persist content.
+    ------------------------------------------------------------ */
+    updateCaretDisplayAndSave() {
+        // update caret field (if present)
+        if (this.caretInput) {
+            try {
+                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
+            } catch { /* ignore */ }
         }
-        count = 0;
-        for (let i = caretPos; i < text.length; i++) {
-            if (terminatorRegex.test(text.charAt(i))) {
-                count++;
-                if (count === 2) {
-                    end = i + 1;
-                    break;
-                }
-            }
-        }
-        return { start, end };
-    },
 
-    // revertBrokenHeading method was removed as it's handled by headingManager
+        // persist editor HTML
+        if (this.editorEl) {
+            storage.saveSettings('lastContent', this.editorEl.innerHTML);
+        }
+    },
 };
 
 export default editor;
