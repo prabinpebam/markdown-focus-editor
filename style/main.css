@@ -408,28 +408,10 @@ h1,h2,h3,h4,h5,h6 { position:relative; }
     opacity: 0.8;
 }
 
-/* Developer switch */
-#dev-switch {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1000;
-}
-
-#caret-pos{
-    position:fixed;
-    top:20px;
-    right:120px;       /* leave room for the switch */
-    z-index:1000;
-    padding:2px 4px;
-    font-family:inherit;
-}
-
 b{
     font-weight: 900;
     color: var(--text-color-intense);
 }
-
 
 /* Inline style markers using CSS pseudo-elements */
 b::before, b::after,

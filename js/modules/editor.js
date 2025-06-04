@@ -66,8 +66,6 @@ const editor = {
         
         this.editorEl.focus();
 
-        this.caretInput = document.getElementById('caret-pos');
-        this.devToggle = document.getElementById('dev-toggle');
         this.isSelecting = false;
 
         this.preDomSnapshot = null;
@@ -93,8 +91,6 @@ const editor = {
         this.editorEl.addEventListener('paste', this.boundHandlePaste); // Add paste listener
         
         this.editorEl.addEventListener('input', () => {
-            // if (this.isSelecting) return; // This check might be too broad if selection is cleared by typing.
-                                        // Let's rely on selection state within handleInputFormatting.
             if (!this.lastLogTrigger) {
                 this.lastLogTrigger = 'input';
             }
@@ -105,16 +101,6 @@ const editor = {
         
         this.editorEl.addEventListener('keydown', this.boundHandleEnterKeydown); // Handles preEnterDOM snapshot
 
-        if (this.caretInput){
-            this.caretInput.addEventListener('change', () => {
-                const max   = this.editorEl.innerText.length;
-                let   pos   = parseInt(this.caretInput.value,10);
-                if (isNaN(pos) || pos < 0) pos = 0;
-                if (pos > max) pos = max;
-                this.caretInput.value = pos;
-                this.restoreCaret(pos);
-            });
-        }
         listManager.init(this);
         headingManager.init(this);
         // inlineStyleManager is initialized in app.js and assigned to this.inlineStyleManager
@@ -563,18 +549,6 @@ const editor = {
         
         // Let's rely on the selection state at the moment the input event fires.
         const currentSelection = window.getSelection();
-        // if (currentSelection && !currentSelection.isCollapsed) {
-            // If there's an active, non-collapsed selection (e.g., user selected text and typed over it),
-            // the browser handles deleting the selection and inserting the new char.
-            // This is a valid input scenario we want to capture for undo.
-        // }
-
-
-        if (this.devToggle && !this.devToggle.checked) {
-            // Even if dev mode is off, if an input happened, we might need to record it for undo.
-            // However, custom transformations are skipped.
-            // Let the setTimeout run to record the state if no transformation would have occurred.
-        }
 
         // Capture caret position *before* any potential transformation
         const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
@@ -604,15 +578,13 @@ const editor = {
             }
 
             let transformationOccurred = false;
-            // Only run transformations if dev mode is on (or if certain transformations are always on)
-            if (!this.devToggle || this.devToggle.checked) {
-                if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
-                     transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
-                }
+            
+            if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
+                transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
+            }
 
-                if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
-                    transformationOccurred = this.inlineStyleManager.checkAndApplyInlineStyles(textNodeForInline, offsetInTextNode);
-                }
+            if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
+                transformationOccurred = this.inlineStyleManager.checkAndApplyInlineStyles(textNodeForInline, offsetInTextNode);
             }
 
             // If no custom transformation happened, it means the browser handled the input.
@@ -620,11 +592,7 @@ const editor = {
             // This will cover typing, simple backspace/delete, enter in plain divs, etc.
             if (!transformationOccurred && this.undoManager) {
                 this.undoManager.handleCustomChange('textInput'); 
-                // console.log('[Editor] Recorded state for generic textInput via undoManager.');
             }
-            // Note: Custom transformations (headings, lists, inline styles from markdown)
-            // should call undoManager.handleCustomChange() within their respective modules.
-            // Ctrl+B/I/S shortcuts also call it directly.
 
             if (transformationOccurred) {
                 this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true); 
@@ -637,10 +605,6 @@ const editor = {
     
     handlePotentialPostActionFormatting() {
         if (this.isSelecting) return;
-         if (this.devToggle && !this.devToggle.checked) {
-            this.updateCaretDisplayAndSave(); // No DOM change, just update display
-            return;
-        }
         
         const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
 
@@ -818,7 +782,6 @@ const editor = {
     },
 
     restoreCaret(abs) {
-        console.log(`[restoreCaret] Called. abs: ${abs}, Current editor innerHTML length: ${this.editorEl.innerHTML.length}`); // ADD THIS LOG
         const blocks = this.getBlocks();
         let run = 0, targetBlock = null, innerOffset = 0;
 
@@ -949,20 +912,16 @@ const editor = {
         if (this.focusMode) {
             this.focusMode.updateFocusIfActive();
         }
-        this.updateCaretDisplayAndSave();
+        // persist editor HTML
+        if (this.editorEl) {
+            storage.saveSettings('lastContent', this.editorEl.innerHTML);
+        }
     },
 
     /* ------------------------------------------------------------
       Utility: show caret index in #caret-pos and persist content.
     ------------------------------------------------------------ */
     updateCaretDisplayAndSave() {
-        // update caret field (if present)
-        if (this.caretInput) {
-            try {
-                this.caretInput.value = Math.min(this.getAbsoluteCaretPosition(), 999);
-            } catch { /* ignore */ }
-        }
-
         // persist editor HTML
         if (this.editorEl) {
             storage.saveSettings('lastContent', this.editorEl.innerHTML);
