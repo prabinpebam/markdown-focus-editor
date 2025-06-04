@@ -16,17 +16,24 @@ body {
 }
 
 /* Editor should not handle its own scrolling */
+.editor-wrapper {
+    position: relative;      
+    margin: 60px 0;
+    min-height: calc(100vh - 100px);
+    padding: 0 100px; /* Add horizontal padding to accommodate heading markers */
+}
+
+/* Editor styles */
 #editor {
-    width: 100%;
-    max-width: 1000px;
     margin: auto;
-    padding: 100px 0;
-    min-height: calc(100vh - 40px); /* Account for body padding */
+    max-width: 800px;
+    padding: 40px 20px;
     outline: none;
-    border: none;
-    background: transparent;
+    white-space: pre-wrap;
     line-height: 1.5;
-    overflow: visible; /* No scrolling on editor */
+    background: transparent;
+    position: relative;
+    z-index: 1;
 }
 
 /* Paragraph spacing */
@@ -485,4 +492,16 @@ s::after {
 .dark-theme {
     --selection-bg-color: #4a5c70; /* Dark theme selection background */
     --selection-text-color: #fff;
+}
+
+/* SVG mask for focus mode */
+.svg-defs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1; 
+  opacity: 0;
 }

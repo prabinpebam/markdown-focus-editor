@@ -4,6 +4,7 @@ import headingManager from './headingManager.js';
 
 // undoManager is assigned by app.js
 // inlineStyleManager is assigned by app.js
+// focusMode is assigned by app.js
 
 const editor = {
     /* ──────────────────────────────────────────────────────────────
@@ -945,7 +946,7 @@ const editor = {
     ------------------------------------------------------------ */
     applyFocusAndSave(currentAbsoluteCaretPos, transformationDidOccur) {
         // Update focus mode if it exists and is active
-        if (this.focusMode && transformationDidOccur) {
+        if (this.focusMode) {
             this.focusMode.updateFocusIfActive();
         }
         this.updateCaretDisplayAndSave();

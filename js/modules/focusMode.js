@@ -1,96 +1,169 @@
-import storage from './storage.js';
+// Focus Mode module that handles the highlighting of the current line in the editor
 
 const focusMode = {
-    isActive: false,
     editor: null,
     editorEl: null,
-    overlay: null,
-    
-    init(editor) {
-        this.editor = editor;
-        this.editorEl = editor.editorEl;
-        console.log('[FocusMode] Initialized with editor instance');
-        
-        // Create overlay for focus mode
-        this.overlay = document.createElement('div');
-        this.overlay.id = 'focus-overlay';
-        this.overlay.style.position = 'absolute';
-        this.overlay.style.top = '0';
-        this.overlay.style.left = '0';
-        this.overlay.style.pointerEvents = 'none';
-        this.overlay.style.zIndex = '2';
-        
-        // Insert overlay after the editor
-        this.editorEl.parentNode.insertBefore(this.overlay, this.editorEl.nextSibling);
-        
-        // Initialize focus toggle button
-        const focusToggle = document.getElementById('focus-toggle');
-        if (focusToggle) {
-            focusToggle.addEventListener('change', () => {
-                this.toggleFocus(focusToggle.checked);
-            });
-            
-            // Set initial state based on storage
-            const focusEnabled = localStorage.getItem('focusEnabled');
-            if (focusEnabled !== null) {
-                this.isActive = (focusEnabled === 'true');
-                focusToggle.checked = this.isActive;
-                console.log(`[FocusMode] Initial state set from storage: ${this.isActive ? 'active' : 'inactive'}`);
-                this.applyFocusVisibility();
-            }
-        }
-        
-        // Initialize event listeners to update focus when caret moves
-        this.editorEl.addEventListener('input', () => this.updateFocusIfActive());
-        this.editorEl.addEventListener('click', () => this.updateFocusIfActive());
-        this.editorEl.addEventListener('keyup', (e) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
-                this.updateFocusIfActive();
-            }
-        });
-        document.addEventListener('selectionchange', () => this.updateFocusIfActive());
-        window.addEventListener('resize', () => this.updateFocusIfActive());
-        document.fonts?.ready.then(() => this.updateFocusIfActive());
-    },
-    
-    toggleFocus(isEnabled) {
-        this.isActive = isEnabled;
-        storage.saveSettings('focusEnabled', isEnabled);
-        console.log(`[FocusMode] Focus mode ${isEnabled ? 'enabled' : 'disabled'}`);
-        this.applyFocusVisibility();
-    },
-    
-    updateFocusIfActive() {
-        if (this.isActive) {
-            this.applyFocusVisibility();
-        }
-    },
-    
-    getVisualLines() {
-        // Get the caret position
-        const selection = window.getSelection();
-        if (!selection.rangeCount) return [];
+    editorWrapper: null,
+    focusToggle: null,
+    maskBase: null,
+    focusLine: null,
+    isFocusMode: false,
 
+    init(editorInstance) {
+        // Store reference to the editor instance, not just the DOM element
+        this.editor = editorInstance;
+        this.editorEl = document.getElementById('editor');
+        this.editorWrapper = document.querySelector('.editor-wrapper');
+        this.focusToggle = document.getElementById('focus-toggle');
+        this.maskBase = document.getElementById('mask-base');
+        this.focusLine = document.getElementById('focus-line');
+        
+        // Set up event listeners
+        if (this.focusToggle) {
+            this.focusToggle.addEventListener('change', this.toggleFocusMode.bind(this));
+        }
+        
+        // Only attach event listeners if editorEl is a valid DOM element
+        if (this.editorEl) {
+            this.editorEl.addEventListener('input', this.updateFocusIfActive.bind(this));
+            this.editorEl.addEventListener('click', this.updateFocusIfActive.bind(this));
+            this.editorEl.addEventListener('keyup', this.handleKeyUp.bind(this));
+        } else {
+            console.error('[FocusMode] Editor element not found');
+            return this; // Return early to prevent further errors
+        }
+        
+        document.addEventListener('selectionchange', this.updateFocusIfActive.bind(this));
+        window.addEventListener('resize', this.updateMaskDimensions.bind(this));
+        
+        // Initial setup
+        this.updateMaskDimensions();
+        
+        // Set initial state based on toggle position
+        if (this.focusToggle && this.focusToggle.checked) {
+            this.toggleFocusMode({ target: { checked: true } });
+        }
+
+        console.log('[FocusMode] Initialized with editor instance');
+        return this;
+    },
+
+    toggleFocusMode(event) {
+        this.isFocusMode = event.target.checked;
+        
+        if (this.isFocusMode) {
+            // Update dimensions before applying mask
+            this.updateMaskDimensions();
+            // Apply the mask to the editor wrapper instead of the editor
+            this.editorWrapper.style.maskImage = 'url(#focusMask)';
+            this.editorWrapper.style.webkitMaskImage = 'url(#focusMask)';
+        } else {
+            this.editorWrapper.style.maskImage = 'none';
+            this.editorWrapper.style.webkitMaskImage = 'none';
+        }
+
+        this.updateFocusIfActive();
+    },
+
+    handleKeyUp(e) {
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+            this.updateFocusIfActive();
+        }
+    },
+
+    updateMaskDimensions() {
+        const svgDefs = document.querySelector('.svg-defs');
+        if (!svgDefs || !this.editorWrapper) return;
+        
+        // Set explicit dimensions on SVG
+        svgDefs.setAttribute('width', window.innerWidth);
+        svgDefs.setAttribute('height', window.innerHeight);
+        svgDefs.style.width = window.innerWidth + 'px';
+        svgDefs.style.height = window.innerHeight + 'px';
+        
+        // Set mask base dimensions to cover the entire editor area
+        if (this.maskBase) {
+            this.maskBase.setAttribute('width', window.innerWidth);
+            this.maskBase.setAttribute('height', Math.max(
+                window.innerHeight, 
+                this.editorWrapper.scrollHeight
+            ));
+        }
+        
+        this.updateFocusIfActive();
+    },
+
+    updateFocusIfActive() {
+        if (!this.isFocusMode) return;
+        this.updateFocusLine();
+    },
+
+    updateFocusLine() {
+        if (!this.isFocusMode || !this.focusLine) return;
+        
+        // Get selection and range
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        
         const range = selection.getRangeAt(0).cloneRange();
         range.collapse(true);
         
         // Get the rect of the caret position
         const caretRect = range.getClientRects()[0];
-        if (!caretRect) return [];
+        if (!caretRect) return;
         
-        // Find active visual line based on Y position
+        // Calculate line position based on caret Y position
+        const wrapperRect = this.editorWrapper.getBoundingClientRect();
         const caretY = caretRect.top;
+        
+        // Get computed line height for the editor
         const editorStyles = window.getComputedStyle(this.editorEl);
         const lineHeight = parseInt(editorStyles.lineHeight) || parseInt(editorStyles.fontSize) * 1.5;
         
-        // Increase the tolerance to better detect lines
-        const tolerance = lineHeight * 0.75;
+        // Define tolerance for grouping characters into the same visual line
+        const tolerance = lineHeight * 0.5;
         
-        // Find all the lines by Y position
-        const allLinePositions = new Map(); // Map of Y position -> array of rects
+        // Find the visual line at the caret position
+        const visualLine = this.findVisualLineAtY(caretY, tolerance);
         
-        // Find all text nodes in the editor
-        const textNodes = [];
+        if (visualLine) {
+            // Calculate position relative to wrapper for Y, but use full viewport width
+            const wrapperLeftOffset = wrapperRect.left;
+            const x = -wrapperLeftOffset; // Negative offset to start at the left edge of viewport
+            const y = visualLine.top - wrapperRect.top + this.editorWrapper.scrollTop;
+            const width = window.innerWidth; // Use full viewport width
+            const height = visualLine.height;
+            
+            // Update focus line
+            this.focusLine.setAttribute('x', x);
+            this.focusLine.setAttribute('y', y);
+            this.focusLine.setAttribute('width', width);
+            this.focusLine.setAttribute('height', height);
+        } else {
+            // Fallback: use the caret position to estimate line with full viewport width
+            const lineHeight = parseInt(getComputedStyle(this.editorEl).lineHeight) || 24;
+            
+            const wrapperLeftOffset = wrapperRect.left;
+            const x = -wrapperLeftOffset; // Negative offset to start at left edge of viewport
+            const y = caretRect.top - wrapperRect.top - lineHeight/4 + this.editorWrapper.scrollTop;
+            const width = window.innerWidth; // Use full viewport width
+            const height = lineHeight;
+            
+            // Update focus line
+            this.focusLine.setAttribute('x', x);
+            this.focusLine.setAttribute('y', y);
+            this.focusLine.setAttribute('width', width);
+            this.focusLine.setAttribute('height', height);
+        }
+    },
+
+    findVisualLineAtY(targetY, tolerance) {
+        const editorRect = this.editorEl.getBoundingClientRect();
+        
+        // Group characters by Y position to identify visual lines
+        const visualLinesByY = new Map();
+        
+        // Process all text nodes in the editor
         const walker = document.createTreeWalker(this.editorEl, NodeFilter.SHOW_TEXT);
         while (walker.nextNode()) {
             const textNode = walker.currentNode;
@@ -99,201 +172,50 @@ const focusMode = {
             // Skip empty text nodes
             if (!text.trim()) continue;
             
-            // Get the range for the entire text node
-            const nodeRange = document.createRange();
-            nodeRange.selectNodeContents(textNode);
+            // Sample characters to identify line breaks
+            // For long text nodes, we sample every few characters to improve performance
+            const step = Math.max(1, Math.floor(text.length / 20));
             
-            // Check all characters to determine line boundaries
-            for (let i = 0; i < text.length; i++) {
+            for (let i = 0; i < text.length; i += step) {
                 const charRange = document.createRange();
                 charRange.setStart(textNode, i);
-                charRange.setEnd(textNode, i + 1);
+                charRange.setEnd(textNode, Math.min(i + 1, text.length));
                 
                 const rects = charRange.getClientRects();
                 if (rects.length > 0) {
                     const rect = rects[0];
+                    // Round Y position to group similar positions
                     const roundedTop = Math.round(rect.top / tolerance) * tolerance;
                     
-                    if (!allLinePositions.has(roundedTop)) {
-                        allLinePositions.set(roundedTop, []);
+                    if (!visualLinesByY.has(roundedTop)) {
+                        visualLinesByY.set(roundedTop, {
+                            top: rect.top,
+                            height: rect.height,
+                            rects: [rect]
+                        });
+                    } else {
+                        const line = visualLinesByY.get(roundedTop);
+                        line.rects.push(rect);
+                        // Update height to maximum of all rects in this line
+                        line.height = Math.max(line.height, rect.height);
                     }
-                    
-                    allLinePositions.get(roundedTop).push({
-                        rect: rect,
-                        node: textNode,
-                        startOffset: i,
-                        endOffset: i + 1
-                    });
                 }
             }
         }
         
-        // Convert the map to an array of lines sorted by Y position
-        const allLines = Array.from(allLinePositions.entries())
-            .map(([yPos, rects]) => ({ 
-                yPos, 
-                rects,
-                distance: Math.abs(yPos - caretY) 
-            }))
-            .sort((a, b) => a.yPos - b.yPos);
-
-        // Find the current line (closest to caret)
-        const currentLineIndex = allLines.findIndex(line => 
-            Math.abs(line.yPos - caretY) < tolerance);
+        // Find the line containing the target Y position
+        let bestLine = null;
+        let minDistance = Infinity;
         
-        if (currentLineIndex === -1) return [];
-        
-        // Get current line and adjacent lines
-        const result = [];
-        
-        // Current line
-        const currentLine = allLines[currentLineIndex];
-        result.push(this.createVisualLine(currentLine.rects, 'current'));
-        
-        // Line above
-        if (currentLineIndex > 0) {
-            const aboveLine = allLines[currentLineIndex - 1];
-            result.push(this.createVisualLine(aboveLine.rects, 'above'));
-        }
-        
-        // Line below
-        if (currentLineIndex < allLines.length - 1) {
-            const belowLine = allLines[currentLineIndex + 1];
-            result.push(this.createVisualLine(belowLine.rects, 'below'));
-        }
-        
-        return result;
-    },
-    
-    createVisualLine(rects, type) {
-        if (!rects.length) return null;
-        
-        // Sort rects from left to right
-        rects.sort((a, b) => a.rect.left - b.rect.left);
-        
-        // Calculate the position and dimensions
-        const firstRect = rects[0].rect;
-        const lastRect = rects[rects.length - 1].rect;
-        const top = firstRect.top;
-        const left = firstRect.left;
-        const width = lastRect.right - firstRect.left;
-        const height = firstRect.height;
-        
-        // Create Range that spans the entire line
-        const lineRange = document.createRange();
-        lineRange.setStart(rects[0].node, rects[0].startOffset);
-        lineRange.setEnd(rects[rects.length - 1].node, rects[rects.length - 1].endOffset);
-        
-        return {
-            top: top,
-            left: left,
-            width: width,
-            height: height,
-            range: lineRange,
-            type: type
-        };
-    },
-    
-    applyFocusVisibility() {
-        if (!this.isActive) {
-            // Reset the editor and hide overlay
-            this.editorEl.style.opacity = '';
-            this.overlay.innerHTML = '';
-            return;
-        }
-        
-        // Set editor to dim state
-        this.editorEl.style.opacity = '0.3';
-        
-        // Clear previous overlay content
-        this.overlay.innerHTML = '';
-        
-        // Get exact editor dimensions and position
-        const editorRect = this.editorEl.getBoundingClientRect();
-        const parentRect = this.editorEl.parentNode.getBoundingClientRect();
-        
-        // Set overlay position to match editor
-        this.overlay.style.position = 'absolute';
-        this.overlay.style.top = `${editorRect.top - parentRect.top}px`;
-        this.overlay.style.left = `${editorRect.left - parentRect.left}px`;
-        this.overlay.style.width = `${editorRect.width}px`;
-        this.overlay.style.height = `${editorRect.height}px`;
-        this.overlay.style.padding = getComputedStyle(this.editorEl).padding;
-        
-        // Get visual lines
-        const visualLines = this.getVisualLines();
-        
-        // Debug info
-        console.log('[FocusMode] Visual lines detected:', visualLines.map(line => line.type));
-        
-        // Calculate the extra width needed for heading markers (8ch)
-        const fontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
-        const extraWidth = 8 * fontSize; // 8ch worth of space
-        
-        // Render each line
-        visualLines.forEach(lineInfo => {
-            if (!lineInfo) return;
-            
-            // Create highlight background element
-            const highlight = document.createElement('div');
-            highlight.className = `overlay-line line-highlight line-${lineInfo.type}`;
-            
-            // Position with extended width to cover heading markers
-            highlight.style.position = 'absolute';
-            highlight.style.top = `${lineInfo.top - editorRect.top}px`;
-            highlight.style.left = `${-extraWidth}px`; // Start before the editor content
-            highlight.style.width = `${lineInfo.width + extraWidth}px`; // Extend width to include markers
-            highlight.style.height = `${lineInfo.height}px`;
-            
-            if (lineInfo.type === 'current') {
-                highlight.classList.add('focus-line');
+        for (const [roundedY, line] of visualLinesByY.entries()) {
+            const distance = Math.abs(line.top - targetY);
+            if (distance < tolerance && distance < minDistance) {
+                bestLine = line;
+                minDistance = distance;
             }
-            
-            this.overlay.appendChild(highlight);
-            
-            // Clone the contents of the range for text display
-            if (lineInfo.range) {
-                try {
-                    const contents = lineInfo.range.cloneContents();
-                    
-                    // Create a container for the full text content
-                    const textContainer = document.createElement('div');
-                    textContainer.className = `line-text line-${lineInfo.type}`;
-                    textContainer.appendChild(contents);
-                    
-                    textContainer.style.position = 'absolute';
-                    textContainer.style.top = `${lineInfo.top - editorRect.top}px`;
-                    textContainer.style.left = `${lineInfo.left - editorRect.left}px`;
-                    
-                    // Copy styles from the source nodes
-                    const parentNodes = new Set();
-                    let node = lineInfo.range.startContainer;
-                    while (node && node !== this.editorEl) {
-                        parentNodes.add(node.nodeType === 3 ? node.parentNode : node);
-                        node = node.parentNode;
-                    }
-                    
-                    // Apply all parent styles that might affect text rendering
-                    parentNodes.forEach(parentNode => {
-                        if (parentNode && parentNode.nodeType === 1) {  // Element node
-                            const style = window.getComputedStyle(parentNode);
-                            textContainer.style.fontFamily = style.fontFamily || textContainer.style.fontFamily;
-                            textContainer.style.fontSize = style.fontSize || textContainer.style.fontSize;
-                            textContainer.style.fontWeight = style.fontWeight || textContainer.style.fontWeight;
-                            textContainer.style.fontStyle = style.fontStyle || textContainer.style.fontStyle;
-                            textContainer.style.lineHeight = style.lineHeight || textContainer.style.lineHeight;
-                            textContainer.style.letterSpacing = style.letterSpacing || textContainer.style.letterSpacing;
-                            textContainer.style.textDecoration = style.textDecoration || textContainer.style.textDecoration;
-                            textContainer.style.color = style.color || textContainer.style.color;
-                        }
-                    });
-                    
-                    this.overlay.appendChild(textContainer);
-                } catch (e) {
-                    console.error("[FocusMode] Error cloning range contents:", e);
-                }
-            }
-        });
+        }
+        
+        return bestLine;
     }
 };
 
