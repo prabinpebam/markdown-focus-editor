@@ -64,7 +64,7 @@ const toolbar = {
         if (this.toolbarElement && !this.isToolbarActive) {
             this.toolbarElement.classList.add('is-toolbar-active');
             this.isToolbarActive = true;
-            // console.log('Toolbar opened');
+            console.log('[Toolbar] Opened toolbar');
         }
     },
 
@@ -72,7 +72,7 @@ const toolbar = {
         if (this.toolbarElement && this.isToolbarActive) {
             this.toolbarElement.classList.remove('is-toolbar-active');
             this.isToolbarActive = false;
-            // console.log('Toolbar closed');
+            console.log('[Toolbar] Closed toolbar');
         }
     },
 
@@ -128,6 +128,7 @@ const toolbar = {
         document.body.style.setProperty('--base-font', `${size}px`);
         this.baseFontSize = size; // Update internal tracking
         storage.saveSettings('fontSize', size);
+        console.log(`[Toolbar] Font size changed to ${size}px`);
         // If editor element directly uses font-size, update it too
         if (editor.editorEl) {
             // This might be redundant if editor's CSS inherits --base-font,

@@ -6,7 +6,7 @@ const undoManager = {
 
     init(editorInstance) {
         this.editor = editorInstance;
-        // console.log('UndoManager initialized');
+        console.log('[UndoManager] Initialized with editor instance');
         // It's crucial to record the initial state AFTER editor content is loaded.
         // This might be called from editor.js after storage.loadSettings() or initial content setup.
     },
@@ -14,7 +14,7 @@ const undoManager = {
     recordInitialState() {
         if (!this.editor || !this.editor.editorEl || this.history.length > 0) return; // Only record if history is empty
         this.recordState("initialLoad");
-        // console.log('[UndoManager] Initial state recorded.');
+        console.log('[UndoManager] Initial state recorded. History size: 1, Index: 0');
     },
 
     recordState(operationType = 'unknown') {
@@ -58,7 +58,7 @@ const undoManager = {
         const previousState = this.history[this.currentIndex];
         this.editor.editorEl.innerHTML = previousState.html;
         this.editor.restoreCaret(previousState.caret);
-        // console.log(`[UndoManager] Undo performed. Index: ${this.currentIndex}`);
+        console.log(`[UndoManager] Undo performed. Index: ${this.currentIndex}, Operation: ${this.history[this.currentIndex]?.operation || 'unknown'}`);
         this.editor.updateCaretDisplayAndSave(); // Update display after undo
         this.editor.applyFocusAndSave(previousState.caret, true); // Re-apply focus
         return true;
@@ -75,7 +75,7 @@ const undoManager = {
         const nextState = this.history[this.currentIndex];
         this.editor.editorEl.innerHTML = nextState.html;
         this.editor.restoreCaret(nextState.caret);
-        // console.log(`[UndoManager] Redo performed. Index: ${this.currentIndex}`);
+        console.log(`[UndoManager] Redo performed. Index: ${this.currentIndex}, Operation: ${this.history[this.currentIndex]?.operation || 'unknown'}`);
         this.editor.updateCaretDisplayAndSave(); // Update display after redo
         this.editor.applyFocusAndSave(nextState.caret, true); // Re-apply focus
         return true;

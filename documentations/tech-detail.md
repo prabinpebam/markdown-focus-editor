@@ -189,21 +189,6 @@ DOM is rendered only the first time an list item syntax match happens. Just one 
        - the list item is kept in between this two lists as an li item for the parent ul/ol
 
 
-# Focus mode
-
-- **Toggle**: Via `focusToggle` checkbox in toolbar (`focusEnabled` boolean)
-- **Detection**: Sentence boundaries using terminators (`. ! ? …`)
-- **Range Calculation**: 2-sentence window (previous terminator to next terminator)
-- **Persistence**: Saved to localStorage as `markdownEditorFocusEnabled`
-- **Styling**: Text within focus mode is 90% opacity, text outside focus range is 30% opacity. This respects light and dark themme.
-
-**Current Logic**:
-1. Focus is driven by the current caret position. Map current caret position to absolute character index
-2. Walk backwards until 2nd terminator found. The character immediately after the terminator is the focus start index.
-  1. If only 1 or no terminator is found, that means the caret is in the beginning of the doc. Hence the start of the doc itself is the focust start index.
-3. Walk forwards until 2nd terminator found. The terminator is included in the focus amd it is the focus end index.
-  1. If only 1 or no terminator is found, that means the caret is in the end of the doc. Hence the end of the doc itself is the focust end index.
-4. Apply focus style during DOM building
 
 
 # text style support

@@ -13,13 +13,13 @@ const theme = {
             // Create the bound function only once and store it at module level
             if (!boundToggleThemeFunction) {
                 boundToggleThemeFunction = this.toggleTheme.bind(this);
-                // console.log('[Theme] Created module-level boundToggleThemeFunction');
+                console.log('[Theme] Created module-level boundToggleThemeFunction');
             }
 
             // Always remove before adding to be safe, using the module-level singleton reference
             this.themeToggleButton.removeEventListener('click', boundToggleThemeFunction);
             this.themeToggleButton.addEventListener('click', boundToggleThemeFunction);
-            // console.log('[Theme] Event listener attached/re-attached.');
+            console.log('[Theme] Event listener attached/re-attached.');
         }
         // Initial theme application is handled by storage.loadSettings which should call applyTheme
     },
@@ -40,25 +40,24 @@ const theme = {
     },
 
     toggleTheme() {
-        // console.log('[Theme] toggleTheme attempt.'); // Log entry attempt
+        console.log('[Theme] Toggle theme attempt started');
         if (isCurrentlyToggling) {
-            // console.log('[Theme] Debounce: Toggle already in progress.');
+            console.log('[Theme] Debounce: Toggle already in progress, ignoring request');
             return; // Prevent rapid re-execution
         }
         isCurrentlyToggling = true;
-        // console.log('[Theme] toggleTheme execution started.');
 
         const currentThemeIsDark = document.body.classList.contains('dark-theme');
         const newTheme = currentThemeIsDark ? 'light' : 'dark';
         this.applyTheme(newTheme);
         storage.saveSettings('theme', newTheme);
+        console.log(`[Theme] Theme toggled from ${currentThemeIsDark ? 'dark' : 'light'} to ${newTheme}`);
 
-        // Reset the flag after a short delay.
-        // This allows the current event processing to complete and prevents immediate re-triggering.
+        // Reset the flag after a short delay
         setTimeout(() => {
             isCurrentlyToggling = false;
-            // console.log('[Theme] Debounce: Flag reset.');
-        }, 100); // 100ms cooldown
+            console.log('[Theme] Debounce: Flag reset, ready for next toggle');
+        }, 100);
     }
 };
 

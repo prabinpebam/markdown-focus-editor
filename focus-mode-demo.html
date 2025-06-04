@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Focus Mode Editor Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --base-font: 16px;
+      --text-color: #333;
+      --text-color-intense: #000;
+      --bg-color: #f5f5f5;
+      --toggle-active: #2196F3;
+      --toggle-inactive: #ccc;
+    }
+    
+    body {
+      margin: 0;
+      font-family: 'Roboto Mono', monospace;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+      font-size: var(--base-font);
+      height: 100vh;
+      overflow-x: hidden;
+    }
+    
+    .dark-theme {
+      --text-color: #e0e0e0;
+      --text-color-intense: #fff;
+      --bg-color: #1a1a1a;
+      --selection-bg-color: #4a5c70;
+      --selection-text-color: #fff;
+    }
+    
+    .light-theme {
+      --text-color: #333;
+      --text-color-intense: #000;
+      --bg-color: #f5f5f5;
+      --selection-bg-color: #ACCEF7;
+      --selection-text-color: #000;
+    }
+    
+    /* Controls bar */
+    .controls {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(8px);
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      z-index: 100;
+    }
+    
+    /* Switch toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--toggle-inactive);
+      transition: .4s;
+      border-radius: 24px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+      background-color: var(--toggle-active);
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+    
+    /* Editor container */
+    .editor-wrapper {
+      position: relative;      
+      margin: 60px 0;
+      min-height: calc(100vh - 100px);
+      padding: 0 100px; /* Add horizontal padding to accommodate heading markers */
+    }
+    
+    /* Editor styles */
+    #editor {
+      margin: auto;
+      max-width: 800px;
+      padding: 40px 20px;
+      outline: none;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      background: transparent;
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* Different tags styling */
+    h1 { font-size: calc(var(--base-font) * 2.5); margin: 1.5em 0 0.5em; font-weight: bold; }
+    h2 { font-size: calc(var(--base-font) * 2.0); margin: 1.2em 0 0.5em; font-weight: bold; }
+    h3 { font-size: calc(var(--base-font) * 1.6); margin: 1.0em 0 0.5em; font-weight: bold; }
+    
+    #editor div {
+      margin-top: 1.5em;
+    }
+    
+    #editor li {
+      margin-top: .6em;
+    }
+    
+    /* SVG mask container - modified to be properly sized */
+    .svg-defs {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: -1;
+      opacity: 0;
+    }
+    
+    /* Styling for inline elements with markdown markers */
+    b::before, b::after,
+    i::before, i::after,
+    s::before, s::after {
+      font-size: calc(var(--base-font) * .85);
+      opacity: 0.7;
+      font-weight: normal;
+      color: var(--text-color);
+      user-select: none;
+    }
+    
+    b::before { content: "**"; margin-right: 0.1em; }
+    b::after { content: "**"; margin-left: 0.1em; }
+    
+    i::before { content: "*"; margin-right: 0.1em; }
+    i::after { content: "*"; margin-left: 0.1em; }
+    
+    s::before { content: "~~"; margin-right: 0.1em; }
+    s::after { content: "~~"; margin-left: 0.1em; }
+    
+    .heading-marker {
+      position: absolute;
+      left: -8ch;
+      width: 7ch;
+      text-align: right;
+      pointer-events: none;
+      user-select: none;
+      opacity: 0.8;
+    }
+    
+    /* Theme toggle button */
+    #theme-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-color);
+      padding: 5px 10px;
+      border-radius: 4px;
+      transition: background-color 0.3s;
+    }
+    
+    #theme-toggle:hover {
+      background: rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body class="light-theme">
+  <!-- SVG mask for the focus effect -->
+  <svg class="svg-defs" width="100%" height="100%">
+    <defs>
+      <mask id="focusMask" maskUnits="userSpaceOnUse">
+        <!-- Base layer: makes everything 30% opacity -->
+        <rect id="mask-base" width="100%" height="100%" fill="rgba(255, 255, 255, 0.3)"></rect>
+        <!-- Focus lines: full opacity -->
+        <rect id="focus-line" fill="white" x="0" y="0" width="0" height="0"></rect>
+      </mask>
+    </defs>
+  </svg>
+  
+  <!-- Controls bar -->
+  <div class="controls">
+    <button id="theme-toggle" title="Toggle Light/Dark Theme">Toggle Theme</button>
+    <span>Focus Mode:</span>
+    <label class="switch">
+      <input type="checkbox" id="focus-toggle">
+      <span class="slider"></span>
+    </label>
+  </div>
+  
+  <!-- Editor container -->
+  <div class="editor-wrapper">
+    <div id="editor" contenteditable="true" spellcheck="false">
+      <h1><span class="heading-marker">#</span>Markdown Focus Editor</h1><div>Welcome to the Focus Mode Demo. This editor highlights the current line where your cursor is positioned when focus mode is active.</div><h2><span class="heading-marker">##</span>Formatting Examples</h2><div>This paragraph demonstrates <b>bold text</b> using the &lt;b&gt; tag with markdown-style markers. <span style="background-color: transparent;">Here's an example of </span><i style="background-color: transparent;">italic text</i><span style="background-color: transparent;"> with the &lt;i&gt; tag and markers. </span><span style="background-color: transparent;">You can also use </span><s style="background-color: transparent;">strikethrough</s><span style="background-color: transparent;"> formatting with the &lt;s&gt; tag.</span></div><h3><span class="heading-marker">###</span>List Examples</h3><ul><li>This is an unordered list item</li><li>Another list item with <b>bold text</b></li><li><ul><li>This is a nested item</li><li>Another nested item with <i>italic</i> text</li></ul></li></ul><div>And here's an ordered list:</div><ol><li>First ordered item</li><li>Second ordered item</li><li>Third ordered item with <s>strikethrough</s> text<ol><li>Nested ordered item one</li><li>Nested ordered item two</li></ol></li></ol><div>When focus mode is enabled, the current line will be highlighted at full opacity while all other content fades to 30% opacity. Try clicking different parts of this document and toggling the focus mode switch to see the effect. You can edit this text freely as it's a fully functional contenteditable area.</div>
+    </div>
+  </div>
+
+  <script>
+    // DOM Elements
+    const editor = document.getElementById('editor');
+    const editorWrapper = document.querySelector('.editor-wrapper');
+    const focusToggle = document.getElementById('focus-toggle');
+    const themeToggle = document.getElementById('theme-toggle');
+    const maskBase = document.getElementById('mask-base');
+    const focusLine = document.getElementById('focus-line');
+    
+    // State
+    let isFocusMode = false;
+    
+    // Initialize
+    function init() {
+      // Set mask dimensions
+      updateMaskDimensions();
+      
+      // Set up event listeners
+      focusToggle.addEventListener('change', toggleFocusMode);
+      themeToggle.addEventListener('click', toggleTheme);
+      editor.addEventListener('input', updateFocusLine);
+      editor.addEventListener('click', updateFocusLine);
+      editor.addEventListener('keyup', handleKeyUp);
+      document.addEventListener('selectionchange', updateFocusLine);
+      window.addEventListener('resize', updateMaskDimensions);
+      
+      // Initial focus state
+      toggleFocusMode({ target: focusToggle });
+    }
+    
+    // Toggle focus mode
+    function toggleFocusMode(event) {
+      isFocusMode = event.target.checked;
+      
+      if (isFocusMode) {
+        // Update dimensions before applying mask
+        updateMaskDimensions();
+        // Apply the mask to the editor wrapper instead of the editor
+        editorWrapper.style.maskImage = 'url(#focusMask)';
+        editorWrapper.style.webkitMaskImage = 'url(#focusMask)';
+        editor.style.maskImage = 'none';
+        editor.style.webkitMaskImage = 'none';
+      } else {
+        editorWrapper.style.maskImage = 'none';
+        editorWrapper.style.webkitMaskImage = 'none';
+      }
+    }
+    
+    // Toggle theme
+    function toggleTheme() {
+      document.body.classList.toggle('light-theme');
+      document.body.classList.toggle('dark-theme');
+    }
+    
+    // Handle key up events
+    function handleKeyUp(e) {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+        updateFocusLine();
+      }
+    }
+    
+    // Update SVG mask dimensions
+    function updateMaskDimensions() {
+      const wrapperRect = editorWrapper.getBoundingClientRect();
+      const svgDefs = document.querySelector('.svg-defs');
+      
+      // Set explicit dimensions on SVG
+      svgDefs.setAttribute('width', window.innerWidth);
+      svgDefs.setAttribute('height', window.innerHeight);
+      svgDefs.style.width = window.innerWidth + 'px';
+      svgDefs.style.height = window.innerHeight + 'px';
+      
+      // Set mask base dimensions to cover the entire editor area
+      maskBase.setAttribute('width', window.innerWidth);
+      maskBase.setAttribute('height', Math.max(window.innerHeight, editorWrapper.scrollHeight));
+      
+      updateFocusLine();
+    }
+    
+    // Update the focus line position
+    function updateFocusLine() {
+      if (!isFocusMode) return;
+      
+      // Get selection and range
+      const selection = window.getSelection();
+      if (!selection.rangeCount) return;
+      
+      const range = selection.getRangeAt(0).cloneRange();
+      range.collapse(true);
+      
+      // Get the rect of the caret position
+      const caretRect = range.getClientRects()[0];
+      if (!caretRect) return;
+      
+      // Calculate line position based on caret Y position
+      const wrapperRect = editorWrapper.getBoundingClientRect();
+      const caretY = caretRect.top;
+      
+      // Get computed line height for the editor
+      const editorStyles = window.getComputedStyle(editor);
+      const lineHeight = parseInt(editorStyles.lineHeight) || parseInt(editorStyles.fontSize) * 1.5;
+      
+      // Define tolerance for grouping characters into the same visual line
+      const tolerance = lineHeight * 0.5;
+      
+      // Find the visual line at the caret position
+      const visualLine = findVisualLineAtY(caretY, tolerance);
+      
+      if (visualLine) {
+        // Calculate position relative to wrapper for Y, but use full viewport width
+        const wrapperLeftOffset = wrapperRect.left;
+        const x = -wrapperLeftOffset; // Negative offset to start at the left edge of viewport
+        const y = visualLine.top - wrapperRect.top + editorWrapper.scrollTop;
+        const width = window.innerWidth; // Use full viewport width
+        const height = visualLine.height;
+        
+        // Update focus line
+        focusLine.setAttribute('x', x);
+        focusLine.setAttribute('y', y);
+        focusLine.setAttribute('width', width);
+        focusLine.setAttribute('height', height);
+      } else {
+        // Fallback: use the caret position to estimate line with full viewport width
+        const lineHeight = parseInt(getComputedStyle(editor).lineHeight) || 24;
+        
+        const wrapperLeftOffset = wrapperRect.left;
+        const x = -wrapperLeftOffset; // Negative offset to start at left edge of viewport
+        const y = caretRect.top - wrapperRect.top - lineHeight/4 + editorWrapper.scrollTop;
+        const width = window.innerWidth; // Use full viewport width
+        const height = lineHeight;
+        
+        // Update focus line
+        focusLine.setAttribute('x', x);
+        focusLine.setAttribute('y', y);
+        focusLine.setAttribute('width', width);
+        focusLine.setAttribute('height', height);
+      }
+    }
+    
+    // Find the visual line at the given Y coordinate
+    function findVisualLineAtY(targetY, tolerance) {
+      const editorRect = editor.getBoundingClientRect();
+      
+      // Group characters by Y position to identify visual lines
+      const visualLinesByY = new Map();
+      
+      // Process all text nodes in the editor
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode;
+        const text = textNode.nodeValue;
+        
+        // Skip empty text nodes
+        if (!text.trim()) continue;
+        
+        // Sample characters to identify line breaks
+        // For long text nodes, we sample every few characters to improve performance
+        const step = Math.max(1, Math.floor(text.length / 20));
+        
+        for (let i = 0; i < text.length; i += step) {
+          const charRange = document.createRange();
+          charRange.setStart(textNode, i);
+          charRange.setEnd(textNode, Math.min(i + 1, text.length));
+          
+          const rects = charRange.getClientRects();
+          if (rects.length > 0) {
+            const rect = rects[0];
+            // Round Y position to group similar positions
+            const roundedTop = Math.round(rect.top / tolerance) * tolerance;
+            
+            if (!visualLinesByY.has(roundedTop)) {
+              visualLinesByY.set(roundedTop, {
+                top: rect.top,
+                height: rect.height,
+                rects: [rect]
+              });
+            } else {
+              const line = visualLinesByY.get(roundedTop);
+              line.rects.push(rect);
+              // Update height to maximum of all rects in this line
+              line.height = Math.max(line.height, rect.height);
+            }
+          }
+        }
+      }
+      
+      // Find the line containing the target Y position
+      let bestLine = null;
+      let minDistance = Infinity;
+      
+      for (const [roundedY, line] of visualLinesByY.entries()) {
+        const distance = Math.abs(line.top - targetY);
+        if (distance < tolerance && distance < minDistance) {
+          bestLine = line;
+          minDistance = distance;
+        }
+      }
+      
+      return bestLine;
+    }
+    
+    // Initialize when the page loads
+    window.addEventListener('load', function() {
+      init();
+      // Force mask dimensions update after a small delay
+      setTimeout(updateMaskDimensions, 100);
+    });
+  </script>
+</body>
+</html>

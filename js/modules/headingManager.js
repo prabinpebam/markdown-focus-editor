@@ -3,6 +3,7 @@ const headingManager = {
 
     init(editorInstance) {
         this.editor = editorInstance;
+        console.log('[HeadingManager] Initialized with editor instance');
     },
 
     // Regex for heading markers
@@ -75,7 +76,7 @@ const headingManager = {
         h.append(markerSpan, hTextNode);
 
         divBlock.replaceWith(h);
-        console.log(`[DOM Render] Transformed DIV to H${level}.`);
+        console.log(`[HeadingManager] Transformed DIV to H${level} with content: "${rawBody.substring(0, 30)}${rawBody.length > 30 ? '...' : ''}"`);
 
         // After successful DOM change:
         if (this.editor.undoManager) {
@@ -85,7 +86,7 @@ const headingManager = {
         const sel = window.getSelection();
         if (sel) {
             // Calculate the length of the typed markdown prefix (e.g., "# " is 2 chars)
-            const matchedMarkerAndSpaceLength = match[1].length + 1; // +1 for the space/ZWSP
+            const matchedMarkerAndSpaceLength = match[1].length + 1 // +1 for the space/ZWSP
             
             // Adjust caretOffsetInTextNode relative to the start of the raw body content
             let caretOffsetInRawBody = caretOffsetInTextNode - matchedMarkerAndSpaceLength;
@@ -143,7 +144,7 @@ const headingManager = {
                 const div = document.createElement('div');
                 div.textContent = marker.textContent + body; 
                 h.replaceWith(div);
-                console.log(`[DOM Render] Reverted H${h.tagName.substring(1)} to DIV.`);
+                console.log(`[HeadingManager] Reverted H${h.tagName.substring(1)} to DIV with content: "${body.substring(0, 30)}${body.length > 30 ? '...' : ''}"`);
                 reverted = true;
 
                 // After successful DOM change:

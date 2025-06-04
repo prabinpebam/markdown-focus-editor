@@ -3,7 +3,7 @@ const listManager = {
 
     init(editorInstance) {
         this.editor = editorInstance;
-        // console.log('listManager initialized');
+        console.log('[ListManager] Initialized with editor instance');
     },
 
     // Regex for UL and OL markers
@@ -33,7 +33,7 @@ const listManager = {
         listElement.appendChild(listItemElement);
 
         blockNode.replaceWith(listElement);
-        console.log(`[DOM Render] Converted block to <${listType}> list.`);
+        console.log(`[ListManager] Converted block to <${listType}> list with content: "${itemText.substring(0, 30)}${itemText.length > 30 ? '...' : ''}"`);
 
         // After successful DOM change:
         if (this.editor.undoManager) {
@@ -352,7 +352,7 @@ const listManager = {
                 followingSiblingsInCurrentList.reverse().forEach(sib => { // Insert in correct order
                     currentList.insertBefore(sib, anchor.nextSibling);
                     anchor = sib; // This is not quite right for restoring order.
-                                  // Simpler: just append them back if no outdent.
+                                  // Simpler: just append them back if no outdented.
                 });
                  // Correct re-attachment if no outdent occurred:
                  // listItemElement is still in currentList. Append followers after it.

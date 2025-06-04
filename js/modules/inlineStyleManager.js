@@ -11,6 +11,7 @@ const inlineStyleManager = {
 
     init(editorInstance) {
         this.editor = editorInstance;
+        console.log('[InlineStyleManager] Initialized with editor instance');
     },
 
     checkAndApplyInlineStyles(textNode, offset) {
@@ -19,6 +20,7 @@ const inlineStyleManager = {
         }
 
         const originalTextContentOfNode = textNode.nodeValue || '';
+        console.log(`[InlineStyleManager] Checking for patterns at offset ${offset} in text: "${originalTextContentOfNode.substring(Math.max(0, offset-10), offset+1)}"`);
 
         for (const pattern of this.patterns) {
             const lookBehindLength = pattern.mdMarker.length + 1; // e.g., "**a" is 3 chars
@@ -28,8 +30,8 @@ const inlineStyleManager = {
 
 
                 if (match && match[1] === pattern.mdMarker && match[2]) {
-                    console.log(`[InlineStyle] Potential match for ${pattern.name}. Relevant text: "${relevantTextForMatch}"`);
-                    console.log(`[InlineStyle] Match details: full="${match[0]}", marker="${match[1]}", char="${match[2]}"`);
+                    console.log(`[InlineStyleManager] Potential match for ${pattern.name}. Relevant text: "${relevantTextForMatch}"`);
+                    console.log(`[InlineStyleManager] Match details: full="${match[0]}", marker="${match[1]}", char="${match[2]}"`);
 
                     const charTyped = match[2];
                     const parentBefore = textNode.parentNode;
@@ -130,6 +132,7 @@ const inlineStyleManager = {
                         this.editor.undoManager.handleCustomChange(`inline_${pattern.name}`);
                     }
                     console.log(`[InlineStyle] Applied ${pattern.name} (HTML only).`);
+                    console.log(`[InlineStyleManager] Applied ${pattern.name} style to character "${match[2]}"`);
                     return true; // Important: process only one pattern match per input
                 }
             }

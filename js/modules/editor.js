@@ -941,11 +941,13 @@ const editor = {
 
     /* ------------------------------------------------------------
       Focus-mode was removed; some code still calls this helper.
-      Provide a no-op stub that only keeps persistence in sync.
+      Now we use the focusMode module instead.
     ------------------------------------------------------------ */
-    applyFocusAndSave(/* currentAbsoluteCaretPos, transformationDidOccur */) {
-        // In the old implementation this also applied opacity changes.
-        // Now we just persist the editor state.
+    applyFocusAndSave(currentAbsoluteCaretPos, transformationDidOccur) {
+        // Update focus mode if it exists and is active
+        if (this.focusMode && transformationDidOccur) {
+            this.focusMode.updateFocusIfActive();
+        }
         this.updateCaretDisplayAndSave();
     },
 
