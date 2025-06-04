@@ -36,6 +36,28 @@ const focusMode = {
         document.addEventListener('selectionchange', this.updateFocusIfActive.bind(this));
         window.addEventListener('resize', this.updateMaskDimensions.bind(this));
         
+        // Add resize observer to track editor content height changes
+        this.resizeObserver = new ResizeObserver(entries => {
+            this.updateMaskDimensions();
+        });
+        
+        if (this.editorWrapper) {
+            this.resizeObserver.observe(this.editorWrapper);
+        }
+        
+        // Add mutation observer to detect content changes
+        this.mutationObserver = new MutationObserver(mutations => {
+            this.updateMaskDimensions();
+        });
+        
+        if (this.editorEl) {
+            this.mutationObserver.observe(this.editorEl, { 
+                childList: true, 
+                subtree: true,
+                characterData: true
+            });
+        }
+        
         // Initial setup
         this.updateMaskDimensions();
         
@@ -75,22 +97,29 @@ const focusMode = {
         const svgDefs = document.querySelector('.svg-defs');
         if (!svgDefs || !this.editorWrapper) return;
         
-        // Set explicit dimensions on SVG
-        svgDefs.setAttribute('width', window.innerWidth);
-        svgDefs.setAttribute('height', window.innerHeight);
-        svgDefs.style.width = window.innerWidth + 'px';
-        svgDefs.style.height = window.innerHeight + 'px';
+        // Calculate the total height needed
+        const wrapperRect = this.editorWrapper.getBoundingClientRect();
+        const totalHeight = Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+            this.editorWrapper.scrollHeight,
+            window.innerHeight
+        );
         
-        // Set mask base dimensions to cover the entire editor area
+        // Set explicit dimensions on SVG - both attributes and CSS
+        svgDefs.setAttribute('width', window.innerWidth);
+        svgDefs.setAttribute('height', totalHeight);
+        svgDefs.style.width = window.innerWidth + 'px';
+        svgDefs.style.height = totalHeight + 'px';
+        
+        // Set mask base dimensions to cover the entire potential content area
         if (this.maskBase) {
             this.maskBase.setAttribute('width', window.innerWidth);
-            this.maskBase.setAttribute('height', Math.max(
-                window.innerHeight, 
-                this.editorWrapper.scrollHeight
-            ));
+            this.maskBase.setAttribute('height', totalHeight);
         }
         
         this.updateFocusIfActive();
+        console.log(`[FocusMode] Updated mask dimensions. Height: ${totalHeight}px`);
     },
 
     updateFocusIfActive() {
