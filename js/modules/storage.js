@@ -1,6 +1,7 @@
 import editor from './editor.js';
 import theme from './theme.js';
 import toolbar from './toolbar.js';
+import documentStore from './documentStore.js';
 
 const storage = {
     loadSettings() {
@@ -35,11 +36,30 @@ const storage = {
             // The focusMode module will handle applying the focus effect after initialization
         }
 
-        // Load last saved content
-        const lastContent = localStorage.getItem('lastContent');
-        if (lastContent && editorEl) {
-            editorEl.innerHTML = lastContent;
-            console.log(`[Storage] Loaded content (${lastContent.length} chars)`);
+        // Check if there's a current document ID
+        const currentDocId = localStorage.getItem('currentDocId');
+        if (currentDocId) {
+            const doc = documentStore.getDocumentById(currentDocId);
+            if (doc && editorEl) {
+                editorEl.innerHTML = doc.content;
+                console.log(`[Storage] Loaded document with ID: ${currentDocId}`);
+            } else {
+                // If document not found, clear the currentDocId
+                localStorage.removeItem('currentDocId');
+                // Load last unsaved content as fallback
+                const lastContent = localStorage.getItem('lastContent');
+                if (lastContent && editorEl) {
+                    editorEl.innerHTML = lastContent;
+                    console.log(`[Storage] Loaded fallback content (${lastContent.length} chars)`);
+                }
+            }
+        } else {
+            // No current document, load last saved content
+            const lastContent = localStorage.getItem('lastContent');
+            if (lastContent && editorEl) {
+                editorEl.innerHTML = lastContent;
+                console.log(`[Storage] Loaded content (${lastContent.length} chars)`);
+            }
         }
         // Note: editor.undoManager.recordInitialState(); in app.js handles initial undo state.
     },
@@ -47,6 +67,17 @@ const storage = {
     saveSettings(key, value) {
         localStorage.setItem(key, value);
         console.log(`[Storage] Saved setting: ${key} = ${key === 'lastContent' ? `(${value.length} chars)` : value}`);
+        
+        // If saving content and we have a current document ID, update the document
+        if (key === 'lastContent' && localStorage.getItem('currentDocId')) {
+            const docId = localStorage.getItem('currentDocId');
+            const doc = documentStore.getDocumentById(docId);
+            if (doc) {
+                doc.content = value;
+                documentStore.saveDocument(doc);
+                console.log(`[Storage] Updated document ID: ${docId} with new content`);
+            }
+        }
     }
 };
 

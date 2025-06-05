@@ -85,7 +85,16 @@ const undoManager = {
     handleCustomChange(operationType) {
         // console.log(`[UndoManager] handleCustomChange called for: ${operationType}`);
         this.recordState(operationType);
-    }
+    },
+
+    /**
+     * Clear the undo/redo history stack
+     */
+    clearHistory() {
+        this.history = [];
+        this.historyIndex = -1;
+        console.log('[UndoManager] History cleared');
+    },
 };
 
 export default undoManager;

@@ -1,5 +1,6 @@
 import storage from './storage.js';
 import editor from './editor.js';
+import documentStore from './documentStore.js';
 
 const toolbar = {
     toolbarElement: null, // This is the main #toolbar div which is the activator
@@ -11,6 +12,8 @@ const toolbar = {
         this.toolbarElement = document.getElementById('toolbar'); 
         // this.toolbarContent = document.getElementById('toolbar'); // Redundant, toolbarElement is the container
 
+        this.newDocumentButton = document.getElementById('new-document');
+        this.openFileButton = document.getElementById('open-file');
         this.increaseFontButton = document.getElementById('increase-font');
         this.decreaseFontButton = document.getElementById('decrease-font');
         this.fullscreenButton = document.getElementById('fullscreen');
@@ -34,6 +37,33 @@ const toolbar = {
             });
         }
 
+        // Initialize New Document button
+        if (this.newDocumentButton) {
+            this.newDocumentButton.addEventListener('click', () => this.createNewDocument());
+        }
+
+        // Initialize Open Document button - FIX: Only dispatch the custom event
+        if (this.openFileButton) {
+            // Remove any existing click handlers by cloning and replacing
+            const newOpenFileButton = this.openFileButton.cloneNode(true);
+            this.openFileButton.parentNode.replaceChild(newOpenFileButton, this.openFileButton);
+            this.openFileButton = newOpenFileButton;
+            
+            // Add clean click handler that ONLY dispatches the custom event
+            this.openFileButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Use dynamic import to avoid circular dependencies
+                import('./modalManager.js').then(module => {
+                    const modalManager = module.default;
+                    modalManager.openModal();
+                }).catch(err => {
+                    console.error('Error loading modalManager:', err);
+                });
+            });
+        }
+
         if (this.increaseFontButton) {
             this.increaseFontButton.addEventListener('click', () => this.changeFontSize(2));
         }
@@ -43,6 +73,14 @@ const toolbar = {
         if (this.fullscreenButton) { // Add event listener for fullscreen
             this.fullscreenButton.addEventListener('click', () => this.toggleFullscreen());
         }
+
+        // Add keyboard shortcut for new document (Ctrl+N)
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault(); // Prevent default browser action
+                this.createNewDocument();
+            }
+        });
 
         document.addEventListener('click', (event) => {
             if (this.isToolbarActive && this.toolbarElement) {
@@ -135,6 +173,49 @@ const toolbar = {
             // but explicit set ensures it if editor has its own specific font-size rule.
             // editor.editorEl.style.fontSize = `${size}px`;
         }
+    },
+
+    createNewDocument() {
+        // Clear the current document ID to indicate we're creating a new document
+        localStorage.removeItem('currentDocId');
+        
+        // Create a new empty document
+        const newDoc = new documentStore.Document(
+            null, // Generate a new ID
+            'Untitled Document', // Default name
+            '', // Empty content
+            null, // Generated timestamp for createdAt
+            null  // Generated timestamp for lastEditedAt
+        );
+        
+        // Save the new document
+        const savedDoc = documentStore.saveDocument(newDoc);
+        
+        // Set it as the current document
+        localStorage.setItem('currentDocId', savedDoc.id);
+        
+        // Clear the editor
+        if (editor.editorEl) {
+            editor.editorEl.innerHTML = '';
+            
+            // Reset the undo manager if it exists
+            if (editor.undoManager) {
+                // Check if the method exists before calling it
+                if (typeof editor.undoManager.clearHistory === 'function') {
+                    editor.undoManager.clearHistory();
+                } else {
+                    // Fallback if clearHistory is not available
+                    console.warn('[Toolbar] undoManager.clearHistory is not a function');
+                }
+                
+                editor.undoManager.recordInitialState();
+            }
+        }
+        
+        console.log(`[Toolbar] Created new document with ID: ${savedDoc.id}`);
+        
+        // Close the toolbar after action
+        this.closeToolbar();
     }
 };
 

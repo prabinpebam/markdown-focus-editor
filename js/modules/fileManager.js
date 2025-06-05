@@ -10,12 +10,42 @@ const fileManager = {
         if (saveBtn) {
             saveBtn.addEventListener('click', this.saveFile.bind(this));
         }
-        if (openBtn) {
-            openBtn.addEventListener('click', () => fileInput.click());
+        // REMOVE OR MODIFY THIS CODE if it exists:
+        // We don't want fileManager to handle the open-file button clicks anymore
+        // since toolbar.js now handles it to open the documents modal instead
+        
+        // Find any code like this and remove it:
+        /*
+        const openFileBtn = document.getElementById('open-file');
+        if (openFileBtn) {
+            openFileBtn.addEventListener('click', (e) => {
+                // Code that opens file dialog
+                // ...
+            });
         }
-        if (fileInput) {
-            fileInput.addEventListener('change', this.openFile.bind(this));
-        }
+        */
+        
+        // Also check for Ctrl+O handlers that open system dialogs:
+        /*
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+                e.preventDefault();
+                // Code that opens file dialog
+                // ...
+            }
+        });
+        */
+        
+        // Instead, if we want fileManager to respond to file open events,
+        // listen for the custom event from modalManager:
+        document.addEventListener('loadDocument', (event) => {
+            const doc = event.detail.document;
+            if (doc && doc.content) {
+                // Handle loading the document content here
+                // This will be triggered by modalManager when a document is selected
+            }
+        });
+        
         // Optional: implement drag-and-drop on editor
         this.editorEl.addEventListener('dragover', (e) => {
             e.preventDefault();

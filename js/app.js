@@ -7,6 +7,8 @@ import utils from './modules/utils.js';
 import undoManager from './modules/undoManager.js'; // Correctly import default
 import inlineStyleManager from './modules/inlineStyleManager.js'; // Import new manager
 import focusMode from './modules/focusMode.js'; // Import focus mode module
+import documentStore from './modules/documentStore.js'; // Import document store module
+import modalManager from './modules/modalManager.js'; // Import modal manager module
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] DOM content loaded, initializing modules');
@@ -41,6 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
     focusMode.init(editor); // Pass editor instance
     editor.focusMode = focusMode; // Make it accessible from editor instance
     console.log('[App] FocusMode initialized and linked to editor');
+
+    // Initialize the document modal manager
+    modalManager.init();
+    console.log('[App] ModalManager initialized');
 
     // Load persisted settings such as theme, font size, focus state, etc.
     storage.loadSettings(); // Should ideally be called after editor and other modules are ready

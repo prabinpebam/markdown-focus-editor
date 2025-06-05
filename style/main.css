@@ -488,3 +488,543 @@ s::after {
   opacity: 0;
   will-change: transform; /* Performance optimization */
 }
+
+/* Document Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    display: none;
+}
+
+.document-modal {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: auto; /* Let positioning control width */
+    height: auto; /* Let positioning control height */
+    display: none;
+    flex-direction: column;
+    z-index: 3001;
+    transform: none; /* Remove the transform that was centering */
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: white;
+    border-radius: 8px 8px 0 0;
+    z-index: 10;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.document-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-radius: 0 0 8px 8px;
+}
+
+.storage-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.storage-usage {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 200px;
+}
+
+.storage-progress-container {
+    width: 100%;
+    height: 6px;
+    background-color: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.storage-progress-bar {
+    height: 100%;
+    background-color: #2196F3;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.primary-btn, .secondary-btn {
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border: none;
+    transition: background-color 0.2s ease;
+}
+
+.primary-btn {
+    background-color: #2196F3;
+    color: white;
+}
+
+.primary-btn:hover {
+    background-color: #0d8bf2;
+}
+
+.secondary-btn {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.secondary-btn:hover {
+    background-color: #d0d0d0;
+}
+
+/* Document Thumbnail Styles */
+.document-thumbnail {
+    background-color: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+    position: relative;
+    border: 1px solid #e0e0e0;
+}
+
+.document-thumbnail:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.thumbnail-header {
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.doc-title-container {
+    flex: 1;
+    overflow: hidden;
+}
+
+.doc-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+
+.doc-title:hover {
+    color: #2196F3;
+}
+
+.thumbnail-actions {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: flex;
+    gap: 8px;
+}
+
+.document-thumbnail:hover .thumbnail-actions {
+    visibility: visible;
+    opacity: 1;
+}
+
+.export-doc-btn,
+.delete-doc-btn {
+    background: none;
+    border: none;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #555;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.export-doc-btn:hover {
+    background-color: rgba(33, 150, 243, 0.1);
+    color: #2196F3;
+}
+
+.delete-doc-btn:hover {
+    background-color: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+
+.last-edited {
+    padding: 5px 15px;
+    margin: 0;
+    font-size: 0.75rem;
+    color: #888;
+    background-color: #f9f9f9;
+}
+
+.doc-preview {
+    flex: 1;
+    padding: 15px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    overflow: hidden;
+    color: #555;
+    position: relative;
+}
+
+.doc-preview::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, white);
+}
+
+/* Title edit popover */
+.title-edit-popover {
+    position: fixed;
+    z-index: 4000;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    display: flex;
+    padding: 2px;
+    border: 1px solid #2196F3;
+}
+
+.title-edit-input {
+    flex: 1;
+    border: none;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    outline: none;
+}
+
+.title-save-btn {
+    background: #2196F3;
+    border: none;
+    color: white;
+    padding: 0 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 1rem;
+}
+
+.title-save-btn:hover {
+    background: #0d8bf2;
+}
+
+/* Import status highlights */
+.document-thumbnail.imported-doc {
+    border: 2px solid #ffa726;
+}
+
+.document-thumbnail.conflict-doc {
+    border: 2px solid #d32f2f;
+}
+
+.conflict-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 220px; /* All but the title area */
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+}
+
+.conflict-overlay button {
+    width: 100%;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.keep-current-btn {
+    background-color: #2196F3;
+    color: white;
+}
+
+.keep-imported-btn {
+    background-color: #ff9800;
+    color: white;
+}
+
+/* Import status toolbar */
+.import-status-toolbar {
+    position: sticky;
+    bottom: 80px; /* Above the footer */
+    left: 0;
+    right: 0;
+    background-color: rgba(33, 150, 243, 0.9);
+    padding: 10px 20px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 4px;
+    margin: 0 20px; /* To match modal padding */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 20;
+}
+
+.import-status-info {
+    display: flex;
+    gap: 20px;
+}
+
+.import-status-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.import-status-actions button {
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.keep-all-btn {
+    background-color: white;
+    color: #2196F3;
+}
+
+.discard-all-btn {
+    background-color: transparent;
+    border: 1px solid white;
+    color: white;
+}
+
+/* Dark theme adjustments */
+.dark-theme .document-thumbnail {
+    background-color: #353535;
+    border-color: #555;
+}
+
+.dark-theme .thumbnail-header {
+    border-bottom-color: #444;
+}
+
+.dark-theme .doc-title:hover {
+    color: #64b5f6;
+}
+
+.dark-theme .last-edited {
+    background-color: #333;
+    color: #aaa;
+}
+
+.dark-theme .doc-preview {
+    color: #ccc;
+}
+
+.dark-theme .doc-preview::after {
+    background: linear-gradient(to bottom, transparent, #353535);
+}
+
+.dark-theme .title-edit-popover {
+    background: #424242;
+    border-color: #64b5f6;
+}
+
+.dark-theme .title-edit-input {
+    background: #424242;
+    color: #e0e0e0;
+}
+
+.dark-theme .export-doc-btn,
+.dark-theme .delete-doc-btn {
+    color: #aaa;
+}
+
+.dark-theme .export-doc-btn:hover {
+    background-color: rgba(33, 150, 243, 0.2);
+    color: #64b5f6;
+}
+
+.dark-theme .delete-doc-btn:hover {
+    background-color: rgba(244, 67, 54, 0.2);
+    color: #ef9a9a;
+}
+
+/* Document Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    display: none;
+}
+
+.document-modal {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: auto; /* Let positioning control width */
+    height: auto; /* Let positioning control height */
+    display: none;
+    flex-direction: column;
+    z-index: 3001;
+    transform: none; /* Remove the transform that was centering */
+}
+
+.dark-theme .document-modal {
+    background-color: #2a2a2a;
+    border-color: #444;
+}
+
+.dark-theme .modal-header,
+.dark-theme .modal-footer {
+    background-color: #2a2a2a;
+    border-color: #444;
+}
+
+.dark-theme .close-modal-btn {
+    color: #e0e0e0;
+}
+
+/* Additional button theme adjustments */
+.dark-theme .primary-btn {
+    background-color: #1976D2;
+    color: #ffffff;
+}
+
+.dark-theme .primary-btn:hover {
+    background-color: #1565C0;
+}
+
+.dark-theme .secondary-btn {
+    background-color: #424242;
+    color: #e0e0e0;
+    border: 1px solid #555;
+}
+
+.dark-theme .secondary-btn:hover {
+    background-color: #505050;
+}
+
+.dark-theme .modal-actions button {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dark-theme .title-save-btn {
+    background-color: #1976D2;
+}
+
+.dark-theme .title-save-btn:hover {
+    background-color: #1565C0;
+}
+
+/* Conflict resolution buttons */
+.dark-theme .keep-current-btn {
+    background-color: #1976D2;
+    color: white;
+}
+
+.dark-theme .keep-current-btn:hover {
+    background-color: #1565C0;
+}
+
+.dark-theme .keep-imported-btn {
+    background-color: #F57C00;
+    color: white;
+}
+
+.dark-theme .keep-imported-btn:hover {
+    background-color: #EF6C00;
+}
+
+.dark-theme .keep-all-btn {
+    background-color: #424242;
+    color: #64B5F6;
+    border: 1px solid #64B5F6;
+}
+
+.dark-theme .discard-all-btn {
+    background-color: transparent;
+    border: 1px solid #e0e0e0;
+    color: #e0e0e0;
+}

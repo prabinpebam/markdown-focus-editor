@@ -31,8 +31,9 @@
   <div id="toolbar">
     <div id="toolbar-activator-dot"></div>
     <!-- Toolbar Buttons: -->
+    <button id="new-document" title="New Document (Ctrl+N)"><img src="images/new-document.svg" alt="New Document"></button>
+    <button id="open-file" title="Open Document (Ctrl+O)"><img src="images/open-document.svg" alt="Open Document"></button>
     <button id="save" title="Save (Ctrl+S)"><img src="images/save.svg" alt="Save"></button>
-    <button id="open-file" title="Open"><img src="images/open.svg" alt="Open"></button>
     <button id="increase-font" title="Increase Font Size"><img src="images/increase-font.svg" alt="Increase Font"></button>
     <button id="decrease-font" title="Decrease Font Size"><img src="images/decrease-font.svg" alt="Decrease Font"></button>
     <button id="toggle-theme" title="Toggle Light/Dark Theme"><img src="images/dark-theme.svg" alt="Toggle Theme"></button>
@@ -51,6 +52,36 @@
     </div>
   </div>
 
+  <!-- Document Modal -->
+  <div id="document-modal-overlay" class="modal-overlay"></div>
+  <div id="openDocumentModal" class="document-modal">
+    <div class="modal-header">
+      <h2>Open document</h2>
+      <button id="close-document-modal" class="close-modal-btn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="document-grid" class="document-grid">
+        <!-- Document thumbnails will be dynamically inserted here -->
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="storage-info">
+        <p id="doc-count">Documents: <span>0</span></p>
+        <div class="storage-usage">
+          <div class="storage-progress-container">
+            <div id="storage-progress-bar" class="storage-progress-bar"></div>
+          </div>
+          <p id="storage-text">0 KB used (0% of 5MB)</p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="import-md-doc" class="secondary-btn">Import md doc</button>
+        <button id="export-documents-backup" class="primary-btn">Export documents backup</button>
+        <button id="import-backup" class="secondary-btn">Import backup</button>
+      </div>
+    </div>
+  </div>
+
   <div id="font-modal">
     <div class="content">
       <h3>Select Font</h3>
@@ -58,6 +89,10 @@
       <button id="close-font-modal">Close</button>
     </div>
   </div>
+
+  <!-- File inputs for document operations -->
+  <input type="file" id="md-file-input" accept=".txt,.md,.html" style="display:none;">
+  <input type="file" id="json-backup-input" accept=".json" style="display:none;">
 
   <!-- Main application -->
   <script type="module" src="js/app.js"></script>
