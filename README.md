@@ -1,64 +1,104 @@
 # Markdown Focus Editor
 
-A distraction-free, browser-based markdown editor with live formatting and focus mode.
-
-![Markdown Focus Editor](images/screenshot.png)
+A simple, distraction-free Markdown editor built with Electron, focusing on one heading section at a time. This editor helps you concentrate on the current part of your document by dimming other sections.
 
 ## Features
 
-- **Focus Mode**: Highlights only the current line for distraction-free writing
-- **Live Markdown Formatting**:
-  - Bold (**text**) with Ctrl+B
-  - Italic (*text*) with Ctrl+I
-  - Strikethrough (~~text~~) with Ctrl+Shift+S
-- **Heading Support**: Type # through ###### and space to create headings
-- **List Support**: Create ordered and unordered lists
-- **Smart Paste**: Preserves formatting when pasting text
-- **Undo/Redo**: Full history management with Ctrl+Z/Ctrl+Y
-- **Dark/Light Theme**: Toggle between themes for comfortable writing
-- **File Management**: Save and open markdown files
-- **Responsive Layout**: Works on different screen sizes
+*   **Focus Mode:** Highlights the current heading section (e.g., text under an `H1`, `H2`, etc.) and dims the rest of the document.
+*   **Real-time Markdown Preview:** (Currently basic, renders Markdown on file save/change)
+*   **File Operations:** Open, save, and save-as Markdown files.
+*   **Theme Toggle:** Switch between light and dark themes.
+*   **Section Navigation:** Quickly jump to the next or previous heading section.
+*   **Basic Formatting:** Apply bold, italic, and strikethrough using keyboard shortcuts.
+*   **Find Functionality:** Search for text within the editor.
+*   **Auto Save:** Automatically saves the file at regular intervals (currently every 30 seconds).
+*   **Word Count:** Displays the word count for the current section and the entire document.
+*   **Recent Files:** Access recently opened files.
+*   **Adjustable Dimming Level:** Control the opacity of non-focused sections.
 
-## Getting Started
+## Screenshots
 
-1. Clone this repository or download the files
-2. Open `index.html` in a modern web browser
-3. Start writing in Markdown!
+*(Consider adding new screenshots if the UI has changed significantly)*
+*TODO: Add updated screenshots*
 
 ## Usage
 
-- Use the floating red dot to access the toolbar
-- Toggle Focus Mode with the switch in the toolbar
-- Format text with standard keyboard shortcuts:
-  - Ctrl+B for bold
-  - Ctrl+I for italic
-  - Ctrl+Shift+S for strikethrough
-- Create headings by typing # to ###### followed by a space
-- Create lists with * or 1. followed by a space
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/markdown-focus-editor.git
+    cd markdown-focus-editor
+    ```
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+3.  **Run the application:**
+    ```bash
+    npm start
+    ```
 
-## Focus Mode
+### Editing
 
-The highlight feature helps maintain attention on the current line by:
-- Keeping the current line at full opacity
-- Dimming all other content for minimal distraction
-- Following cursor movement in real-time
-- Supporting all content types (paragraphs, headings, lists)
+*   Type your Markdown content in the left-hand editor pane.
+*   The editor will automatically identify heading sections (H1, H2, H3, etc.).
+*   The section you are currently editing will be fully opaque, while other sections will be dimmed.
+*   Clicking into a different section will shift the focus.
 
-## Technology
+## Keybindings
 
-- Vanilla JavaScript (ES6+)
-- HTML5
-- CSS3 with CSS variables
-- SVG masks for focus highlighting
-- LocalStorage for content persistence
+*   **File Operations:**
+    *   `Ctrl+O`: Open File
+    *   `Ctrl+S`: Save File
+    *   `Ctrl+Shift+S`: Save File As
+    *   `Ctrl+N`: New File (Opens an empty untitled file)
+*   **Editing & Navigation:**
+    *   `Ctrl+F`: Find
+    *   `Ctrl+B`: Toggle Bold (`**text**`)
+    *   `Ctrl+I`: Toggle Italic (`*text*`)
+    *   `Ctrl+Shift+X` or `Ctrl+Shift+K`: Toggle Strikethrough (`~~text~~`)
+    *   `Alt+UpArrow`: Move to Previous Section
+    *   `Alt+DownArrow`: Move to Next Section
+    *   `Ctrl+PageUp` or `Ctrl+Shift+Tab`: Previous Tab (if multiple files are open)
+    *   `Ctrl+PageDown` or `Ctrl+Tab`: Next Tab (if multiple files are open)
+    *   `Ctrl+W` or `Ctrl+F4`: Close Current Tab
+*   **View:**
+    *   `Ctrl+Shift+I`: Toggle Developer Tools
+    *   `Ctrl+R` or `F5`: Reload
+    *   `Ctrl+Shift+L`: Toggle Theme (Light/Dark)
+    *   `Ctrl+Plus` or `Ctrl+Shift+Plus`: Zoom In
+    *   `Ctrl+-`: Zoom Out
+    *   `Ctrl+0`: Reset Zoom
+    *   `F11`: Toggle Fullscreen
+*   **Focus Mode:**
+    *   `Alt+L`: Toggle Focus Mode (globally enables/disables dimming)
+    *   `Alt+ShiftUpArrow`: Decrease Dimming Level (make non-focused text more visible)
+    *   `Alt+ShiftDownArrow`: Increase Dimming Level (make non-focused text less visible)
 
-## Development
+## How Focus Mode Works
 
-- Enable Dev Mode with the toggle switch in the top right
-- The caret position display helps with debugging
-- Modules are organized in the js/modules directory
-- Styles can be customized in style/main.css
+The editor parses the Markdown content and identifies lines starting with `#`, `##`, `###`, etc., as headings. When your cursor is within a block of text associated with a heading, that entire section (from the heading to just before the next heading of the same or higher level, or the end of the document) is considered "focused." All other sections are dimmed.
 
-## License
+## Future Enhancements / Ideas
 
-MIT License - Feel free to use, modify, and distribute as needed
+*   [x] More robust Markdown preview (e.g., using a library like `marked` or `markdown-it` with live updates). - *Partially implemented, updates on change.*
+*   [x] Theme persistence. - *Implemented*
+*   [ ] Customizable keyboard shortcuts.
+*   [x] Improved section detection logic (e.g., handling horizontal rules or other separators). - *Improved*
+*   [ ] Export to HTML/PDF.
+*   [x] Word count (current section / total). - *Implemented*
+*   [x] Recent files list. - *Implemented*
+*   [x] Auto-save feature. - *Implemented*
+*   [ ] Spell check.
+*   [ ] Support for different Markdown flavors.
+*   [x] Adjustable dimming level. - *Implemented*
+*   [ ] Table editing assistance.
+*   [ ] Image pasting/uploading.
+*   [ ] Presentation mode (viewing one section at a time, full screen).
+*   [ ] Better handling of unsaved changes (e.g., asterisk in title, prompt on close).
+*   [ ] Tabbed interface for multiple open files. - *Implemented*
+*   [ ] Command Palette (`Ctrl+Shift+P`).
+*   [ ] Outline view/Table of Contents panel.
+
+## Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request for any bugs, features, or improvements.

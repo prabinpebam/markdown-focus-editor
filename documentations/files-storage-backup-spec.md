@@ -1,0 +1,50 @@
+# File structure
+We need a file structure to save multiple docs in local storage. Here's how I'm thinking about it.
+- JSON structure
+    - Randomly generated unique ID, use timestamp as input parameter to make it even more unique
+    - Doc name
+    - Creation - *date and time*
+    - Last edited - *date and time*
+    - Content - *The actual content of the doc with complete MD syntax*.
+- UX for saving and opening file
+    - Modal dialog box
+    - Thumbnails of all the docs available
+        - Thumbnail structure - Font size can be small. It's meant to simulate the visual look of a printed-out doc on A4 paper.
+            - Doc title, bold, single line with ellipsis
+            - Last edited time and date as sub text under the doc title.
+            - Doc body, a few lines from the content and ellipsis at the end.
+            - On hover of the thumbnail, a small delete icon on appears on the top right corner. This deletes the particular document.
+                - A confirmation dialog shows up to confirm the deletion.
+    - Modal UI
+        - Modal has a header with the title "Open document"
+            - This header is sticky.
+        - There's a closed button on the top right corner. "Esc" key also closes the modal.
+        - The modal opens with a lightbox effect where there's an overlay with 50% opacity above the html body.
+        - Doc thumbnails are arranged in a grid, fit 3 in a row.
+        - The layout should be responsive
+        - Doc thumbnails should be fixed width and height and same for all thumbnails.
+        - The content of the modal is scrollable.
+        - There's a footer of the modal. Subtle text that shows
+            - Total number of docs
+            - the exact size in MB/KB, and what percentage of the 5MB local storage has been taken up by the current files. A progress bar to indicate the percentage usage of the local storage available.
+            - A CTA button that says "Export documents backup".
+                - This exports the entire json as a single json file.
+                - File name is "MD-focus-editor-backup-Date-time.json"
+            - A secondary CTA button that says "Import backup"
+                - This opens up a native OS browse dialog to open the backup json file.
+                - Import can also be done by dragging and dropping of the backup json file anywhere in the modal.
+                - Picking the right backup json file creates the following experience.
+                    - All unique docs with unique IDs that are not conflicting with the existing docs are immediately added to the list. They are shown with a orangish-yellow border to indicate they have just been added. This border is retained until the modal is closed or a new import is initiated, or an export is initiated.
+                    - All docs with conflicting unique ID are shown for conflict resolution.
+                        - Each of this document has a dark red border
+                        - Each of this document thumbnail now has an overlay that covers the body part of the thumbnail but not the title part. The overlay has two buttons, and the button labels are
+                            - Current doc "Keep current: timestamp". Clicking this keeps the current document.
+                            - Imported doc "Keep imported: timestamp" Clicking this keeps the new imported document.
+                        - Once resolved, the dark red border is turned into the orangish-yellow border.
+                    - There's an overall floating sticky toolbar element added just above the footer of the modal.
+                        - This has a status msg
+                            - No. of total docs imported - "Docs imported: *number value*"
+                            - No. of conflicting docs - "Conflicting: *number value*"
+                            - Button group with label "x conflicting docs"
+                                - CTA: Keep all imported docs - "Keep all"
+                                - CTA: Discard all imported docs - "Discard all"
