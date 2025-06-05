@@ -200,17 +200,15 @@ const toolbar = {
             
             // Reset the undo manager if it exists
             if (editor.undoManager) {
-                // Check if the method exists before calling it
                 if (typeof editor.undoManager.clearHistory === 'function') {
                     editor.undoManager.clearHistory();
-                } else {
-                    // Fallback if clearHistory is not available
-                    console.warn('[Toolbar] undoManager.clearHistory is not a function');
                 }
-                
                 editor.undoManager.recordInitialState();
             }
         }
+        
+        // Update document title in the UI
+        document.title = 'Untitled Document - Markdown Focus Editor';
         
         console.log(`[Toolbar] Created new document with ID: ${savedDoc.id}`);
         

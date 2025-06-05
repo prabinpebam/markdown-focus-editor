@@ -60,3 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log('[App] Initialization complete');
 });
+
+// Add keyboard shortcut for Ctrl+O
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault();
+        // Open the document modal
+        modalManager.openModal();
+    }
+});

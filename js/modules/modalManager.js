@@ -154,14 +154,18 @@ const modalManager = {
     createDocumentThumbnail(doc) {
         const thumbnail = document.createElement('div');
         thumbnail.className = 'document-thumbnail';
-        thumbnail.dataset.id = doc.id;
+        thumbnail.dataset.docId = doc.id;
         
         const formattedDate = new Date(doc.lastEditedAt).toLocaleString();
         
         // Prepare a plain text preview (strip HTML/Markdown)
         const previewText = doc.content
             .replace(/<\/?[^>]+(>|$)/g, '') // Remove HTML tags
-            .substring(0, 250); // Limit length
+            .replace(/^#+\s/gm, '') // Remove heading markers
+            .replace(/\*\*(.+?)\*\*/g, '$1') // Remove bold markers
+            .replace(/\*(.+?)\*/g, '$1') // Remove italic markers
+            .replace(/~~(.+?)~~/g, '$1') // Remove strikethrough markers
+            .substring(0, 300); // Limit length
         
         thumbnail.innerHTML = `
             <div class="thumbnail-header">
@@ -169,25 +173,19 @@ const modalManager = {
                     <h3 class="doc-title">${doc.name}</h3>
                 </div>
                 <div class="thumbnail-actions">
-                    <button class="export-doc-btn" title="Export as Markdown">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-                        </svg>
-                    </button>
-                    <button class="delete-doc-btn" title="Delete">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                    </button>
+                    <button class="export-doc-btn" title="Export as Markdown">📄</button>
+                    <button class="delete-doc-btn" title="Delete">🗑️</button>
                 </div>
             </div>
             <p class="last-edited">Last edited: ${formattedDate}</p>
             <div class="doc-preview">${previewText}</div>
         `;
         
-        // Event listeners for the thumbnail
+        // Event listener for clicking the thumbnail
         thumbnail.addEventListener('click', (e) => {
-            if (!e.target.closest('.thumbnail-actions') && !e.target.closest('.doc-title')) {
+            // Only load document if not clicking buttons or title
+            if (!e.target.closest('.thumbnail-actions') && 
+                !e.target.classList.contains('doc-title')) {
                 this.loadDocumentIntoEditor(doc.id);
             }
         });
@@ -223,88 +221,95 @@ const modalManager = {
      */
     showTitleEditPopover(titleEl, docId) {
         // Create popover if it doesn't exist
-        let popover = document.querySelector('.title-edit-popover');
-        if (!popover) {
-            popover = document.createElement('div');
-            popover.className = 'title-edit-popover';
-            popover.innerHTML = `
-                <input type="text" class="title-edit-input">
-                <button class="title-save-btn">✓</button>
-            `;
-            document.body.appendChild(popover);
+        if (!this.titleEditPopover) {
+            this.titleEditPopover = document.createElement('div');
+            this.titleEditPopover.className = 'title-edit-popover';
+            document.body.appendChild(this.titleEditPopover);
         }
         
         // Position popover over the title
         const rect = titleEl.getBoundingClientRect();
-        popover.style.top = `${rect.top - 2}px`;
-        popover.style.left = `${rect.left - 2}px`;
-        popover.style.width = `${rect.width + 40}px`; // Extra width for the button
-        popover.style.display = 'flex';
+        this.titleEditPopover.style.top = `${rect.top}px`;
+        this.titleEditPopover.style.left = `${rect.left}px`;
+        this.titleEditPopover.style.width = `${rect.width + 40}px`; // Extra width for button
         
-        // Set current value
-        const input = popover.querySelector('.title-edit-input');
-        input.value = titleEl.textContent;
+        // Update popover content
+        this.titleEditPopover.innerHTML = `
+            <input type="text" class="title-edit-input" value="${titleEl.textContent}">
+            <button class="title-save-btn">✓</button>
+        `;
+        
+        // Show popover
+        this.titleEditPopover.style.display = 'flex';
+        
+        // Store the document ID in the popover
+        this.titleEditPopover.dataset.docId = docId;
+        
+        // Focus and select all text
+        const input = this.titleEditPopover.querySelector('.title-edit-input');
         input.focus();
         input.select();
         
-        // Save button handler
-        const saveBtn = popover.querySelector('.title-save-btn');
-        const saveHandler = () => {
-            const newTitle = input.value.trim();
-            if (newTitle) {
-                titleEl.textContent = newTitle;
-                documentStore.updateDocumentTitle(docId, newTitle);
-                closePopover();
-            }
-        };
+        // Set up save button handler
+        const saveBtn = this.titleEditPopover.querySelector('.title-save-btn');
+        saveBtn.addEventListener('click', () => this.saveTitleEdit());
         
-        // Setup event listeners for the popover
-        saveBtn.addEventListener('click', saveHandler);
-        
+        // Set up keyboard handlers
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                saveHandler();
+                this.saveTitleEdit();
             } else if (e.key === 'Escape') {
-                closePopover();
+                this.closeTitleEditPopover();
             }
         });
         
-        // Close popover when clicking outside
-        const closePopover = () => {
-            popover.style.display = 'none';
-            document.removeEventListener('click', outsideClickHandler);
-        };
-        
+        // Close when clicking outside
         const outsideClickHandler = (e) => {
-            if (!popover.contains(e.target) && e.target !== titleEl) {
-                closePopover();
+            if (!this.titleEditPopover.contains(e.target) && e.target !== titleEl) {
+                this.closeTitleEditPopover();
+                document.removeEventListener('click', outsideClickHandler);
             }
         };
         
-        // Add the click handler after a short delay to avoid
-        // the current click event triggering it immediately
+        // Add the click handler after a delay to avoid the current click triggering it
         setTimeout(() => {
             document.addEventListener('click', outsideClickHandler);
         }, 10);
     },
     
     /**
-     * Loads a document into the editor and closes the modal
-     * @param {string} docId - Document ID to load
+     * Saves the title edit
      */
-    loadDocumentIntoEditor(docId) {
-        const doc = documentStore.getDocumentById(docId);
-        if (doc) {
-            editor.editorEl.innerHTML = doc.content;
-            // Store current document ID in editor or localStorage for future reference
-            localStorage.setItem('currentDocId', docId);
-            this.closeModal();
+    saveTitleEdit() {
+        if (!this.titleEditPopover) return;
+        
+        const input = this.titleEditPopover.querySelector('.title-edit-input');
+        const docId = this.titleEditPopover.dataset.docId;
+        
+        if (input && docId) {
+            const newTitle = input.value.trim();
             
-            // Re-initialize undo/redo history for the new document
-            if (editor.undoManager) {
-                editor.undoManager.clearHistory();
-                editor.undoManager.recordInitialState();
+            if (newTitle) {
+                // Update the document title
+                documentStore.updateDocumentTitle(docId, newTitle);
+                
+                // Update the title in the UI
+                const titleEl = document.querySelector(`.document-thumbnail[data-doc-id="${docId}"] .doc-title`);
+                if (titleEl) {
+                    titleEl.textContent = newTitle;
+                }
             }
+        }
+        
+        this.closeTitleEditPopover();
+    },
+    
+    /**
+     * Closes the title edit popover
+     */
+    closeTitleEditPopover() {
+        if (this.titleEditPopover) {
+            this.titleEditPopover.style.display = 'none';
         }
     },
     
@@ -319,24 +324,28 @@ const modalManager = {
         a.href = url;
         
         // Create a safe filename based on document title
-        const safeFilename = doc.name.replace(/[^\w\s]/gi, '_').replace(/\s+/g, '_');
+        const safeFilename = doc.name.replace(/[^\w\s]/gi, '_').replace(/\s+/g, '_').toLowerCase();
         a.download = `${safeFilename}.md`;
         
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
     },
     
     /**
-     * Displays a confirmation dialog for document deletion
+     * Confirms deletion of a document
      * @param {string} docId - Document ID to delete
      */
     confirmDeleteDocument(docId) {
         const confirmed = confirm('Are you sure you want to delete this document?');
         if (confirmed) {
+            // Delete from storage
             const deleted = documentStore.deleteDocument(docId);
+            
             if (deleted) {
-                // Remove the thumbnail from DOM
-                const thumbnail = this.documentGrid.querySelector(`[data-id="${docId}"]`);
+                // Remove from UI
+                const thumbnail = document.querySelector(`.document-thumbnail[data-doc-id="${docId}"]`);
                 if (thumbnail) {
                     thumbnail.remove();
                 }
@@ -344,7 +353,7 @@ const modalManager = {
                 // Update storage info
                 this.updateStorageInfo();
                 
-                // If deleted document was active, clear the current ID
+                // If current document was deleted, clear the ID
                 if (localStorage.getItem('currentDocId') === docId) {
                     localStorage.removeItem('currentDocId');
                 }
@@ -393,12 +402,19 @@ const modalManager = {
         reader.onload = (e) => {
             const content = e.target.result;
             
-            // Create a new document in the store
-            const doc = documentStore.createDocument({
-                name: file.name,
-                content: content,
-                lastEditedAt: new Date().toISOString()
-            });
+            // Create a new document using the Document constructor and saveDocument method
+            // instead of the non-existent createDocument method
+            const now = new Date().toISOString();
+            const newDoc = new documentStore.Document(
+                null, // generate a new ID
+                file.name.replace(/\.\w+$/, ''), // Use filename without extension as name
+                content,
+                now, // creation time
+                now  // last edited time
+            );
+            
+            // Save the document
+            const doc = documentStore.saveDocument(newDoc);
             
             // Refresh the modal to show the new document
             this.refreshModalContent();
@@ -443,17 +459,27 @@ const modalManager = {
                 // Parse JSON
                 const importedData = JSON.parse(event.target.result);
                 
-                // Validate structure (basic validation)
+                // Validate structure
                 if (!Array.isArray(importedData)) {
                     throw new Error('Invalid backup format: Expected an array of documents');
                 }
                 
-                // Process imported documents
-                this.processImportedDocuments(importedData);
+                // Make sure modal is open to show the import status
+                if (!this.isModalOpen()) {
+                    this.openModal();
+                }
+                
+                // Store temporarily for conflict resolution
+                this.storeImportedDocsTemporarily(importedData);
+                
+                // Add a short delay to ensure modal is fully rendered
+                setTimeout(() => {
+                    this.processImportedDocuments(importedData);
+                }, 100);
                 
             } catch (error) {
                 console.error('Error processing backup file:', error);
-                alert('Failed to import backup. The file may be corrupted or in an invalid format.');
+                alert('Failed to import backup: ' + error.message);
             }
         };
         
@@ -467,20 +493,116 @@ const modalManager = {
     },
     
     /**
+     * Process imported documents from a backup
+     * @param {Array} importedDocs - The imported document array
+     */
+    processImportedDocuments(importedDocs) {
+        try {
+            if (!Array.isArray(importedDocs) || importedDocs.length === 0) {
+                console.warn('No valid documents found in the import file');
+                alert('No valid documents found in the import file.');
+                return;
+            }
+            
+            // Replace the check for ensureModalReady() with a direct check for the modal
+            if (!this.modal || !document.body.contains(this.modal)) {
+                console.error('Modal is not initialized or not in the DOM');
+                alert('Cannot import: The document modal is not ready.');
+                return;
+            }
+
+            // Get current documents for comparison
+            const currentDocs = documentStore.getAllDocuments();
+            const currentDocIds = currentDocs.map(doc => doc.id);
+            
+            // Statistics for status toolbar
+            const stats = {
+                imported: 0,
+                conflicting: 0
+            };
+            
+            // Create and show the import status toolbar
+            this.createImportStatusToolbar();
+            
+            // Clear any previous highlights
+            this.clearImportStatusUI();
+            
+            // Process each imported document
+            importedDocs.forEach(importedDoc => {
+                // Validate the document has required fields
+                if (!importedDoc.id || typeof importedDoc.content === 'undefined') {
+                    console.warn('Skipping invalid document in import');
+                    return;
+                }
+                
+                // Check if this document ID already exists
+                const hasConflict = currentDocIds.includes(importedDoc.id);
+                
+                if (hasConflict) {
+                    // Handle conflict
+                    stats.conflicting++;
+                    this.handleDocumentConflict(importedDoc, currentDocs.find(doc => doc.id === importedDoc.id));
+                } else {
+                    // No conflict, add as new document
+                    try {
+                        const newDoc = new documentStore.Document(
+                            importedDoc.id,
+                            importedDoc.name,
+                            importedDoc.content,
+                            importedDoc.createdAt,
+                            importedDoc.lastEditedAt
+                        );
+                        
+                        documentStore.saveDocument(newDoc);
+                        stats.imported++;
+                    } catch (error) {
+                        console.error('Error importing document:', error);
+                    }
+                }
+            });
+            
+            // Update the UI
+            this.loadDocuments();
+            this.updateStorageInfo();
+            
+            // Highlight newly imported docs and update conflict UI
+            this.highlightImportedDocuments(importedDocs, stats);
+            
+            console.log(`Import completed: ${stats.imported} imported, ${stats.conflicting} conflicts`);
+        } catch (error) {
+            console.error('Error processing imported documents:', error);
+            alert('Error processing imported documents. See console for details.');
+        }
+    },
+    
+    /**
      * Creates the import status toolbar for conflict resolution
      */
     createImportStatusToolbar() {
         // Remove any existing toolbar first
         this.clearImportStatusUI();
         
+        // Check if modal exists - using this.modal instead of this.modalEl
+        if (!this.modal) {
+            console.error('Modal element not found');
+            return;
+        }
+        
         // Create the toolbar
         this.importStatusToolbar = document.createElement('div');
         this.importStatusToolbar.className = 'import-status-toolbar';
-        this.importStatusToolbar.style.display = 'flex';
         
-        // Add to the modal before the footer
-        const modalFooter = this.modalEl.querySelector('.modal-footer');
-        this.modalEl.insertBefore(this.importStatusToolbar, modalFooter);
+        // Find the modal footer - ensure modal exists first
+        const modalFooter = this.modal.querySelector('.modal-footer');
+        
+        if (!modalFooter) {
+            console.error('Modal footer not found');
+            // Insert at the end of the modal as fallback
+            this.modal.appendChild(this.importStatusToolbar);
+        } else {
+            // Insert before the footer
+            this.modal.insertBefore(this.importStatusToolbar, modalFooter);
+        }
     },
     
     /**
@@ -488,107 +610,23 @@ const modalManager = {
      */
     clearImportStatusUI() {
         if (this.importStatusToolbar) {
-            this.importStatusToolbar.remove();
+            // Make sure the element still exists in the DOM
+            if (this.importStatusToolbar.parentNode) {
+                this.importStatusToolbar.parentNode.removeChild(this.importStatusToolbar);
+            }
             this.importStatusToolbar = null;
         }
         
         // Remove any conflict overlays or highlight borders
-        const highlightedDocs = this.documentGridEl.querySelectorAll('.imported-doc, .conflict-doc');
+        // Use document.querySelectorAll to make sure we're searching in the entire document
+        const highlightedDocs = document.querySelectorAll('.imported-doc, .conflict-doc');
         highlightedDocs.forEach(el => {
             el.classList.remove('imported-doc', 'conflict-doc');
             const overlay = el.querySelector('.conflict-overlay');
-            if (overlay) overlay.remove();
-        });
-    },
-    
-    /**
-     * Imports an MD file as a new document
-     * @param {File} file - The file to import
-     */
-    importMdFile(file) {
-        if (!file) return;
-        
-        const reader = new FileReader();
-        
-        reader.onload = (event) => {
-            const content = event.target.result;
-            
-            // Create a new document
-            const newDoc = new documentStore.Document(
-                null, // generate ID
-                file.name.replace(/\.\w+$/, ''), // Use filename without extension as name
-                content,
-                null, // generated timestamps
-                null  // generated timestamps
-            );
-            
-            // Save the document
-            documentStore.saveDocument(newDoc);
-            
-            // Refresh the document list
-            this.loadDocuments();
-            
-            // Update storage info
-            this.updateStorageInfo();
-        };
-        
-        reader.onerror = (error) => {
-            console.error('Error reading file:', error);
-            alert('Failed to read file. Please try again.');
-        };
-        
-        reader.readAsText(file);
-    },
-    
-    /**
-     * Process imported documents from a backup
-     * @param {Array} importedDocs - The imported document array
-     */
-    processImportedDocuments(importedDocs) {
-        // Get current documents for comparison
-        const currentDocs = documentStore.getAllDocuments();
-        const currentDocIds = currentDocs.map(doc => doc.id);
-        
-        // Statistics for status toolbar
-        const stats = {
-            imported: 0,
-            conflicting: 0
-        };
-        
-        // Create the import status toolbar
-        this.createImportStatusToolbar();
-        
-        // Clear any previous highlights
-        this.clearImportStatusUI();
-        
-        // Process each imported document
-        importedDocs.forEach(importedDoc => {
-            // Check if this document ID already exists
-            const hasConflict = currentDocIds.includes(importedDoc.id);
-            
-            if (hasConflict) {
-                // Handle conflict
-                stats.conflicting++;
-                this.handleDocumentConflict(importedDoc, currentDocs.find(doc => doc.id === importedDoc.id));
-            } else {
-                // No conflict, add as new document
-                const newDoc = new documentStore.Document(
-                    importedDoc.id,
-                    importedDoc.name,
-                    importedDoc.content,
-                    importedDoc.createdAt,
-                    importedDoc.lastEditedAt
-                );
-                
-                documentStore.saveDocument(newDoc);
-                stats.imported++;
+            if (overlay && overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
             }
         });
-        
-        // Update the UI
-        this.loadDocuments();
-        this.updateStorageInfo();
-        this.highlightImportedDocuments(importedDocs, stats);
     },
     
     /**
@@ -597,11 +635,11 @@ const modalManager = {
      * @param {Object} stats - Import statistics
      */
     highlightImportedDocuments(importedDocs, stats) {
-        // Update the import status toolbar
+        // Ensure import status toolbar is updated
         this.updateImportStatusToolbar(stats);
         
         // Find and highlight all imported documents
-        const allDocThumbnails = this.documentGridEl.querySelectorAll('.document-thumbnail');
+        const allDocThumbnails = document.querySelectorAll('.document-thumbnail');
         
         allDocThumbnails.forEach(thumbnail => {
             const docId = thumbnail.dataset.docId;
@@ -609,15 +647,70 @@ const modalManager = {
             
             if (importedDoc) {
                 // Check if this is a conflict
-                const isConflict = thumbnail.querySelector('.conflict-overlay') !== null;
-                
-                if (isConflict) {
+                if (thumbnail.querySelector('.conflict-overlay')) {
                     thumbnail.classList.add('conflict-doc');
                 } else {
                     thumbnail.classList.add('imported-doc');
                 }
             }
         });
+    },
+    
+    /**
+     * Handle a document conflict
+     * @param {Object} importedDoc - The imported document
+     * @param {Object} currentDoc - The current document with the same ID
+     */
+    handleDocumentConflict(importedDoc, currentDoc) {
+        // Find the thumbnail for this document
+        setTimeout(() => {
+            const thumbnail = document.querySelector(`.document-thumbnail[data-doc-id="${currentDoc.id}"]`);
+            if (!thumbnail) return;
+            
+            // Add conflict class
+            thumbnail.classList.add('conflict-doc');
+            
+            // Format dates for better readability
+            const importedDate = new Date(importedDoc.lastEditedAt).toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const currentDate = new Date(currentDoc.lastEditedAt).toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            // Create conflict overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'conflict-overlay';
+            overlay.innerHTML = `
+                <button class="keep-current-btn">Keep current<br>${currentDate}</button>
+                <button class="keep-imported-btn">Keep imported<br>${importedDate}</button>
+            `;
+            
+            // Add event handlers
+            const keepCurrentBtn = overlay.querySelector('.keep-current-btn');
+            keepCurrentBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent document selection
+                this.resolveConflict(currentDoc.id, 'current', importedDoc);
+            });
+            
+            const keepImportedBtn = overlay.querySelector('.keep-imported-btn');
+            keepImportedBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent document selection
+                this.resolveConflict(currentDoc.id, 'imported', importedDoc);
+            });
+            
+            // Add overlay to thumbnail
+            thumbnail.appendChild(overlay);
+        }, 100); // Short delay to ensure thumbnail exists after loadDocuments()
     },
     
     /**
@@ -629,86 +722,84 @@ const modalManager = {
         
         this.importStatusToolbar.innerHTML = `
             <div class="import-status-info">
-                <div>Docs imported: ${stats.imported}</div>
-                <div>Conflicting: ${stats.conflicting}</div>
+                <div>Documents imported: ${stats.imported}</div>
+                <div>Conflicts: ${stats.conflicting}</div>
             </div>
             ${stats.conflicting > 0 ? `
             <div class="import-status-actions">
-                <span>${stats.conflicting} conflicting docs:</span>
+                <span>${stats.conflicting} conflicting ${stats.conflicting === 1 ? 'doc' : 'docs'}:</span>
                 <button class="keep-all-btn" title="Replace all conflicting docs with imported versions">Keep all imported</button>
                 <button class="discard-all-btn" title="Keep all current versions">Discard all imported</button>
             </div>` : ''}
         `;
         
-        // Add event handlers for bulk actions
+        // Add event handlers for bulk actions if there are conflicts
         if (stats.conflicting > 0) {
             const keepAllBtn = this.importStatusToolbar.querySelector('.keep-all-btn');
             const discardAllBtn = this.importStatusToolbar.querySelector('.discard-all-btn');
             
-            keepAllBtn.addEventListener('click', () => this.resolveAllConflicts('imported'));
-            discardAllBtn.addEventListener('click', () => this.resolveAllConflicts('current'));
+            if (keepAllBtn) {
+                keepAllBtn.addEventListener('click', () => this.resolveAllConflicts('imported'));
+            }
+            
+            if (discardAllBtn) {
+                discardAllBtn.addEventListener('click', () => this.resolveAllConflicts('current'));
+            }
         }
-    },
-    
-    /**
-     * Handle a document conflict
-     * @param {Object} importedDoc - The imported document
-     * @param {Object} currentDoc - The current document with the same ID
-     */
-    handleDocumentConflict(importedDoc, currentDoc) {
-        // Find the thumbnail for this document (may need to wait for UI update)
-        setTimeout(() => {
-            const thumbnail = this.documentGridEl.querySelector(`.document-thumbnail[data-doc-id="${currentDoc.id}"]`);
-            if (!thumbnail) return;
-            
-            // Add conflict class
-            thumbnail.classList.add('conflict-doc');
-            
-            // Format dates for display
-            const importedDate = new Date(importedDoc.lastEditedAt).toLocaleString();
-            const currentDate = new Date(currentDoc.lastEditedAt).toLocaleString();
-            
-            // Create conflict overlay
-            const overlay = document.createElement('div');
-            overlay.className = 'conflict-overlay';
-            overlay.innerHTML = `
-                <button class="keep-current-btn">Keep current: ${currentDate}</button>
-                <button class="keep-imported-btn">Keep imported: ${importedDate}</button>
-            `;
-            
-            // Add event handlers
-            overlay.querySelector('.keep-current-btn').addEventListener('click', () => {
-                this.resolveConflict(currentDoc.id, 'current', importedDoc);
-            });
-            
-            overlay.querySelector('.keep-imported-btn').addEventListener('click', () => {
-                this.resolveConflict(currentDoc.id, 'imported', importedDoc);
-            });
-            
-            // Add overlay to thumbnail
-            thumbnail.appendChild(overlay);
-        }, 100); // Short delay to ensure thumbnail exists
     },
     
     /**
      * Resolve a single document conflict
      * @param {string} docId - Document ID
      * @param {string} keepVersion - Which version to keep ('current' or 'imported')
-     * @param {Object} importedDoc - The imported document
+     * @param {Object} importedDoc - The imported document (needed if keeping imported)
      */
     resolveConflict(docId, keepVersion, importedDoc) {
-        const thumbnail = this.documentGridEl.querySelector(`.document-thumbnail[data-doc-id="${docId}"]`);
+        const thumbnail = document.querySelector(`.document-thumbnail[data-doc-id="${docId}"]`);
         if (!thumbnail) return;
         
-        if (keepVersion === 'imported') {
-            // Save the imported version
-            documentStore.saveDocument({
+        let updatedDoc = null;
+        
+        if (keepVersion === 'imported' && importedDoc) {
+            // Save the imported version, replacing the current one
+            updatedDoc = documentStore.saveDocument({
                 id: importedDoc.id,
                 name: importedDoc.name,
                 content: importedDoc.content,
                 createdAt: importedDoc.createdAt,
                 lastEditedAt: importedDoc.lastEditedAt
             });
+            
+            // Update the editor if this is the current document
+            this.updateOpenDocumentIfNeeded(docId, importedDoc);
+            
+            // Also update the thumbnail preview text
+            const previewEl = thumbnail.querySelector('.doc-preview');
+            if (previewEl) {
+                // Create a clean preview text
+                const previewText = importedDoc.content
+                    .replace(/<\/?[^>]+(>|$)/g, '') // Remove HTML tags
+                    .replace(/^#+\s/gm, '') // Remove heading markers
+                    .replace(/\*\*(.+?)\*\*/g, '$1') // Remove bold markers
+                    .replace(/\*(.+?)\*/g, '$1') // Remove italic markers
+                    .replace(/~~(.+?)~~/g, '$1') // Remove strikethrough markers
+                    .substring(0, 300); // Limit length
+                
+            previewEl.innerHTML = previewText;
+            }
+            
+            // Update the title if it changed
+            const titleEl = thumbnail.querySelector('.doc-title');
+            if (titleEl && importedDoc.name) {
+                titleEl.textContent = importedDoc.name;
+            }
+            
+            // Update the last edited date
+            const lastEditedEl = thumbnail.querySelector('.last-edited');
+            if (lastEditedEl && importedDoc.lastEditedAt) {
+                const formattedDate = new Date(importedDoc.lastEditedAt).toLocaleString();
+                lastEditedEl.textContent = `Last edited: ${formattedDate}`;
+            }
         }
         
         // Update UI
@@ -720,21 +811,33 @@ const modalManager = {
         if (overlay) overlay.remove();
         
         // Update stats in toolbar
-        const conflictingCount = this.documentGridEl.querySelectorAll('.conflict-doc').length;
+        const conflictingCount = document.querySelectorAll('.conflict-doc').length;
+        const importedCount = document.querySelectorAll('.imported-doc').length;
+        
         const stats = {
-            imported: this.documentGridEl.querySelectorAll('.imported-doc').length,
+            imported: importedCount,
             conflicting: conflictingCount
         };
+        
         this.updateImportStatusToolbar(stats);
         
-        // If no more conflicts, remove the toolbar after a delay
+        // If no more conflicts, consider removing the toolbar after a delay
         if (conflictingCount === 0) {
             setTimeout(() => {
-                if (this.importStatusToolbar && this.documentGridEl.querySelectorAll('.conflict-doc').length === 0) {
+                if (this.importStatusToolbar && document.querySelectorAll('.conflict-doc').length === 0) {
+                    // Fade out animation if desired
                     this.importStatusToolbar.style.opacity = '0';
-                    setTimeout(() => this.clearImportStatusUI(), 500);
+                    this.importStatusToolbar.style.transition = 'opacity 0.5s ease';
+                    
+                    // Remove after animation completes
+                    setTimeout(() => {
+                        if (this.importStatusToolbar && this.importStatusToolbar.parentNode) {
+                            this.importStatusToolbar.parentNode.removeChild(this.importStatusToolbar);
+                            this.importStatusToolbar = null;
+                        }
+                    }, 500);
                 }
-            }, 1500);
+            }, 2000); // Show resolved state for 2 seconds before removing
         }
     },
     
@@ -743,25 +846,51 @@ const modalManager = {
      * @param {string} keepVersion - Which version to keep ('current' or 'imported')
      */
     resolveAllConflicts(keepVersion) {
-        if (confirm(`Are you sure you want to ${keepVersion === 'imported' ? 'replace all conflicting documents with imported versions' : 'keep all current versions and discard imported conflicts'}?`)) {
-            // Get all conflict thumbnails
-            const conflictThumbnails = this.documentGridEl.querySelectorAll('.conflict-doc');
+        const confirmMessage = keepVersion === 'imported' 
+            ? 'Replace all conflicting documents with imported versions?' 
+            : 'Keep all current versions and discard imported conflicts?';
             
+        if (confirm(confirmMessage)) {
+            // Get all conflict thumbnails
+            const conflictThumbnails = document.querySelectorAll('.conflict-doc');
+            
+            // Get all imported docs to find the matching ones
+            const importedDocsJson = localStorage.getItem('tempImportedDocs');
+            if (!importedDocsJson) {
+                console.error('Could not find imported docs data');
+                return;
+            }
+            
+            const importedDocs = JSON.parse(importedDocsJson);
+            
+            // Process each conflict
             conflictThumbnails.forEach(thumbnail => {
                 const docId = thumbnail.dataset.docId;
-                const overlay = thumbnail.querySelector('.conflict-overlay');
+                const importedDoc = importedDocs.find(doc => doc.id === docId);
                 
-                if (keepVersion === 'imported') {
-                    // Simulate a click on the "Keep imported" button
-                    overlay.querySelector('.keep-imported-btn').click();
-                } else {
-                    // Simulate a click on the "Keep current" button
-                    overlay.querySelector('.keep-current-btn').click();
+                if (docId && importedDoc) {
+                    this.resolveConflict(docId, keepVersion, importedDoc);
                 }
             });
+            
+            console.log(`Bulk resolution complete. Action: keep ${keepVersion} versions`);
         }
     },
-
+    
+    /**
+     * Temporarily store imported docs in localStorage to use for conflict resolution
+     * @param {Array} importedDocs - Array of imported documents
+     */
+    storeImportedDocsTemporarily(importedDocs) {
+        // Store in localStorage temporarily to access during conflict resolution
+        localStorage.setItem('tempImportedDocs', JSON.stringify(importedDocs));
+        
+        // Set a cleanup timeout
+        setTimeout(() => {
+            localStorage.removeItem('tempImportedDocs');
+        }, 30 * 60 * 1000); // Remove after 30 minutes
+    },
+    
     /**
      * Sets up drag and drop functionality for document import
      */
@@ -796,7 +925,85 @@ const modalManager = {
                 }
             }
         });
-    }
+    },
+    
+    /**
+     * Loads a document into the editor
+     * @param {string} docId - Document ID
+     */
+    loadDocumentIntoEditor(docId) {
+        const doc = documentStore.getDocumentById(docId);
+        if (!doc) {
+            console.error(`Document with ID ${docId} not found`);
+            return;
+        }
+        
+        // Set as current document
+        localStorage.setItem('currentDocId', doc.id);
+        
+        // Emit a custom event that the editor can listen for
+        const loadEvent = new CustomEvent('loadDocument', {
+            detail: { document: doc }
+        });
+        document.dispatchEvent(loadEvent);
+        
+        console.log(`Loading document: ${doc.name} (${doc.id})`);
+        
+        // Update the editor content directly if needed
+        const editorEl = document.getElementById('editor');
+        if (editorEl) {
+            editorEl.innerHTML = doc.content;
+            
+            // If editor module is available through window, perform any necessary updates
+            if (window.editor && typeof window.editor.processContent === 'function') {
+                window.editor.processContent();
+            }
+            
+            // If undoManager is available, record the initial state
+            if (window.editor && window.editor.undoManager) {
+                window.editor.undoManager.recordInitialState();
+            }
+        }
+        
+        // Close the modal
+        this.closeModal();
+    },
+    
+    /**
+     * Updates the editor content if the imported document is the currently active one
+     * @param {string} docId - Document ID that was updated
+     * @param {Object} updatedDoc - The updated document object
+     */
+    updateOpenDocumentIfNeeded(docId, updatedDoc) {
+        // Check if this is the currently open document
+        const currentDocId = localStorage.getItem('currentDocId');
+        
+        if (currentDocId === docId) {
+            console.log('Updating currently open document with imported content');
+            
+            // Update the editor content
+            const editorEl = document.getElementById('editor');
+            if (editorEl) {
+                editorEl.innerHTML = updatedDoc.content;
+                
+                // If editor module is available, process the content
+                if (window.editor && typeof window.editor.processContent === 'function') {
+                    window.editor.processContent();
+                }
+                
+                // If undoManager is available, record the new state
+                if (window.editor && window.editor.undoManager) {
+                    window.editor.undoManager.recordInitialState();
+                }
+            }
+            
+            // Dispatch an event to notify other components
+            const updateEvent = new CustomEvent('documentUpdated', {
+                detail: { document: updatedDoc }
+            });
+            document.dispatchEvent(updateEvent);
+        }
+    },
 };
 
 export default modalManager;

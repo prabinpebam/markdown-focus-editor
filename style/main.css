@@ -778,96 +778,515 @@ s::after {
     background: #0d8bf2;
 }
 
-/* Import status highlights */
-.document-thumbnail.imported-doc {
-    border: 2px solid #ffa726;
+/* Remove .header-* rules and add semantic headings */
+h1 { font-size: calc(var(--base-font) * 2.5); margin: 1.5em 0 0.5em; font-weight: bold; }
+h2 { font-size: calc(var(--base-font) * 2.0); margin: 1.2em 0 0.5em; font-weight: bold; }
+h3 { font-size: calc(var(--base-font) * 1.6); margin: 1.0em 0 0.5em; font-weight: bold; }
+h4 { font-size: calc(var(--base-font) * 1.3); margin: 0.8em 0 0.5em; font-weight: bold; }
+h5 { font-size: calc(var(--base-font) * 1.1); margin: 0.6em 0 0.5em; font-weight: bold; }
+h6 { font-size: calc(var(--base-font) * 1.0); margin: 0.5em 0 0.5em; font-weight: bold; }
+
+/* semantic headings already present – just ensure relative positioning */
+h1,h2,h3,h4,h5,h6 { position:relative; }
+
+/* left-hanging hash marker */
+.heading-marker{
+    position:absolute;
+    left:-8ch;
+    width:7ch;
+    text-align:right;
+    pointer-events:none;
+    user-select:none;
+    opacity:.8;
 }
 
-.document-thumbnail.conflict-doc {
-    border: 2px solid #d32f2f;
+/* CSS variables for theme integration */
+:root {
+    --text-color-intense: #000;
+    --text-color: #333;
+    --text-dim-color: rgba(51, 51, 51, 0.4);
+    --base-font: 16px;                 /* ← single source of truth           */
 }
 
-.conflict-overlay {
+.dark-theme {
+    --text-color-intense: #fff;
+    --text-color: #e0e0e0;
+    --text-dim-color: rgba(224, 224, 224, 0.4);
+}
+
+/* Focus mode styling */
+#focus-overlay {
     position: absolute;
-    bottom: 0;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.overlay-line {
+    position: absolute;
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 0;
+}
+
+.line-text {
+    position: absolute;
+    white-space: pre-wrap;
+}
+
+.focus-line {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+}
+
+.line-highlight {
+    position: absolute;
+}
+
+/* Dark theme adjustments for focus mode */
+.dark-theme .focus-line {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Light theme adjustments for focus mode */
+.light-theme .focus-line {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Remove the previous focus mode styling that affected block opacity directly */
+#editor > * {
+    transition: opacity 0.2s ease-out;
+}
+
+/* Dark theme */
+.dark-theme {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+}
+
+.dark-theme #toolbar {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Dark theme adjustments for #toolbar when active */
+.dark-theme #toolbar.is-toolbar-active {
+    background-color: rgba(255, 255, 255, 0.1); 
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark-theme #toolbar button img {
+    filter: invert(1);
+    opacity: 0.8;
+}
+
+.dark-theme #toolbar button:hover img {
+    opacity: 1;
+}
+
+.dark-theme #font-modal .content {
+    background: #2a2a2a;
+    color: #e0e0e0;
+}
+
+.dark-theme #font-list button {
+    background: #3a3a3a;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+.dark-theme #font-list button:hover {
+    background: #4a4a4a;
+}
+
+/* Light theme (default) */
+.light-theme {
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+/* Light theme adjustments for #toolbar when active */
+.light-theme #toolbar.is-toolbar-active {
+    background-color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.light-theme #toolbar button img {
+    filter: invert(0);
+    opacity: 0.6;
+}
+
+.light-theme #toolbar button:hover img {
+    opacity: 0.8;
+}
+
+b{
+    font-weight: 900;
+    color: var(--text-color-intense);
+}
+
+/* Inline style markers using CSS pseudo-elements */
+b::before, b::after,
+i::before, i::after,
+s::before, s::after {
+    font-size: calc(var(--base-font) * .85); /* Slightly smaller than text */
+    opacity: 0.7; /* Slightly dimmer */
+    font-weight: normal; /* Markers shouldn't be bold themselves */
+    color: var(--text-color); /* Use standard text color for markers */
+    /* Prevent selection of pseudo-elements if possible, though browser support varies */
+    user-select: none; 
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;    
+}
+
+b::before {
+    content: "**";
+    margin-right: 0.1em; /* Optional small spacing */
+}
+b::after {
+    content: "**";
+    margin-left: 0.1em; /* Optional small spacing */
+}
+
+i::before {
+    content: "*";
+    margin-right: 0.1em;
+}
+i::after {
+    content: "*";
+    margin-left: 0.1em;
+}
+
+s::before {
+    content: "~~";
+    margin-right: 0.1em;
+}
+s::after {
+    content: "~~";
+    margin-left: 0.1em;
+}
+
+/* For <b><i>text</i></b> to appear as ***text***:
+   The b::before will add "**" and i::before will add "*", visually forming "***".
+   Similarly for ::after. This relies on the visual composition.
+   No special CSS needed for b > i if this composition is acceptable.
+*/
+
+/* Ensure that when text is selected, the pseudo-elements don't get weird selection background */
+::selection {
+    background-color: var(--selection-bg-color, #ACCEF7); /* Define this variable if not already */
+    color: var(--selection-text-color, #000);
+}
+:root {
+    --selection-bg-color: #ACCEF7;
+    --selection-text-color: #000;
+}
+
+.dark-theme {
+    --selection-bg-color: #4a5c70; /* Dark theme selection background */
+    --selection-text-color: #fff;
+}
+
+/* SVG mask for focus mode */
+.svg-defs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1; 
+  opacity: 0;
+  will-change: transform; /* Performance optimization */
+}
+
+/* Document Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
     left: 0;
-    right: 0;
-    height: 220px; /* All but the title area */
-    background-color: rgba(0, 0, 0, 0.7);
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 3000;
+    display: none;
+}
+
+.document-modal {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    width: auto; /* Let positioning control width */
+    height: auto; /* Let positioning control height */
+    display: none;
+    flex-direction: column;
+    z-index: 3001;
+    transform: none; /* Remove the transform that was centering */
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    position: sticky;
+    top: 0;
+    background: white;
+    border-radius: 8px 8px 0 0;
+    z-index: 10;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.close-modal-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+.document-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #eee;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    padding: 20px;
+    gap: 15px;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-radius: 0 0 8px 8px;
 }
 
-.conflict-overlay button {
+.storage-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.storage-usage {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 200px;
+}
+
+.storage-progress-container {
     width: 100%;
-    padding: 8px;
-    border: none;
+    height: 6px;
+    background-color: #eee;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.storage-progress-bar {
+    height: 100%;
+    background-color: #2196F3;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.primary-btn, .secondary-btn {
+    padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.9rem;
-    text-align: center;
+    border: none;
+    transition: background-color 0.2s ease;
 }
 
-.keep-current-btn {
+.primary-btn {
     background-color: #2196F3;
     color: white;
 }
 
-.keep-imported-btn {
-    background-color: #ff9800;
-    color: white;
+.primary-btn:hover {
+    background-color: #0d8bf2;
 }
 
-/* Import status toolbar */
-.import-status-toolbar {
-    position: sticky;
-    bottom: 80px; /* Above the footer */
-    left: 0;
-    right: 0;
-    background-color: rgba(33, 150, 243, 0.9);
-    padding: 10px 20px;
-    color: white;
+.secondary-btn {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.secondary-btn:hover {
+    background-color: #d0d0d0;
+}
+
+/* Document Thumbnail Styles */
+.document-thumbnail {
+    background-color: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    height: 280px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+    position: relative;
+    border: 1px solid #e0e0e0;
+}
+
+.document-thumbnail:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.thumbnail-header {
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 4px;
-    margin: 0 20px; /* To match modal padding */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    z-index: 20;
 }
 
-.import-status-info {
-    display: flex;
-    gap: 20px;
+.doc-title-container {
+    flex: 1;
+    overflow: hidden;
 }
 
-.import-status-actions {
-    display: flex;
-    gap: 10px;
-}
-
-.import-status-actions button {
-    border: none;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.85rem;
+.doc-title {
+    margin: 0;
+    font-size: 1rem;
     font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
 }
 
-.keep-all-btn {
-    background-color: white;
+.doc-title:hover {
     color: #2196F3;
 }
 
-.discard-all-btn {
-    background-color: transparent;
-    border: 1px solid white;
+.thumbnail-actions {
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    display: flex;
+    gap: 8px;
+}
+
+.document-thumbnail:hover .thumbnail-actions {
+    visibility: visible;
+    opacity: 1;
+}
+
+.export-doc-btn,
+.delete-doc-btn {
+    background: none;
+    border: none;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #555;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.export-doc-btn:hover {
+    background-color: rgba(33, 150, 243, 0.1);
+    color: #2196F3;
+}
+
+.delete-doc-btn:hover {
+    background-color: rgba(244, 67, 54, 0.1);
+    color: #f44336;
+}
+
+.last-edited {
+    padding: 5px 15px;
+    margin: 0;
+    font-size: 0.75rem;
+    color: #888;
+    background-color: #f9f9f9;
+}
+
+.doc-preview {
+    flex: 1;
+    padding: 15px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    overflow: hidden;
+    color: #555;
+    position: relative;
+}
+
+.doc-preview::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(to bottom, transparent, white);
+}
+
+/* Title edit popover */
+.title-edit-popover {
+    position: fixed;
+    z-index: 4000;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    display: flex;
+    padding: 2px;
+    border: 1px solid #2196F3;
+}
+
+.title-edit-input {
+    flex: 1;
+    border: none;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 1rem;
+    outline: none;
+}
+
+.title-save-btn {
+    background: #2196F3;
+    border: none;
     color: white;
+    padding: 0 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 1rem;
+}
+
+.title-save-btn:hover {
+    background: #0d8bf2;
 }
 
 /* Dark theme adjustments */
