@@ -7,21 +7,28 @@ const undoManager = {
     init(editorInstance) {
         this.editor = editorInstance;
         console.log('[UndoManager] Initialized with editor instance');
-        // It's crucial to record the initial state AFTER editor content is loaded.
-        // This might be called from editor.js after storage.loadSettings() or initial content setup.
     },
 
     recordInitialState() {
-        if (!this.editor || !this.editor.editorEl || this.history.length > 0) return; // Only record if history is empty
-        this.recordState("initialLoad");
-        console.log('[UndoManager] Initial state recorded. History size: 1, Index: 0');
+        console.log('[UndoManager] Recording initial state...');
+        if (!this.editor || !this.editor.editorEl) {
+            console.warn('[UndoManager] Cannot record initial state - editor or editorEl not available');
+            return;
+        }
+        this.recordState();
+        console.log('[UndoManager] Initial state recorded. History size:', this.history.length, 'Index:', this.currentIndex);
     },
 
     recordState(operationType = 'unknown') {
-        if (!this.editor || !this.editor.editorEl) return;
+        if (!this.editor || !this.editor.editorEl) {
+            console.warn('[UndoManager] Cannot record state - editor or editorEl not available');
+            return;
+        }
 
         const currentState = this.editor.editorEl.innerHTML;
-        const currentCaret = this.editor.getAbsoluteCaretPosition();
+        const currentCaret = this.editor.getAbsoluteCaretPosition ? this.editor.getAbsoluteCaretPosition() : 0;
+        
+        console.log('[UndoManager] Recording state. HTML length:', currentState.length, 'Caret pos:', currentCaret);
 
         // Avoid recording identical consecutive states
         if (this.currentIndex >= 0 && this.history[this.currentIndex].html === currentState) {
@@ -36,54 +43,74 @@ const undoManager = {
             this.history = this.history.slice(0, this.currentIndex + 1);
         }
 
-        this.history.push({ html: currentState, caret: currentCaret, operation: operationType });
-        this.currentIndex++;
+        const state = {
+            html: currentState,
+            caretPos: currentCaret,
+            timestamp: Date.now(),
+            operation: operationType
+        };
 
+        // Remove any states after current index (if we're in the middle of history)
+        this.history = this.history.slice(0, this.currentIndex + 1);
+        
+        // Add new state
+        this.history.push(state);
+        this.currentIndex++;
+        
         // Limit history size
         if (this.history.length > this.maxHistorySize) {
-            this.history.shift(); // Remove the oldest state
-            this.currentIndex--; // Adjust current index
+            this.history.shift();
+            this.currentIndex--;
         }
-        // console.log(`[UndoManager] State recorded (${operationType}). History size: ${this.history.length}, Index: ${this.currentIndex}`);
+        
+        console.log('[UndoManager] State recorded. History size:', this.history.length, 'Index:', this.currentIndex);
     },
 
     undo() {
-        if (!this.editor || !this.editor.editorEl) return false;
-        if (this.currentIndex <= 0) { 
-            // console.log('[UndoManager] Nothing to undo or at initial state.');
-            return false;
+        if (!this.editor || !this.editor.editorEl) {
+            console.warn('[UndoManager] Cannot undo - editor or editorEl not available');
+            return;
         }
 
-        this.currentIndex--;
-        const previousState = this.history[this.currentIndex];
-        this.editor.editorEl.innerHTML = previousState.html;
-        this.editor.restoreCaret(previousState.caret);
-        console.log(`[UndoManager] Undo performed. Index: ${this.currentIndex}, Operation: ${this.history[this.currentIndex]?.operation || 'unknown'}`);
-        this.editor.updateCaretDisplayAndSave(); // Update display after undo
-        this.editor.applyFocusAndSave(previousState.caret, true); // Re-apply focus
-        return true;
+        if (this.currentIndex > 0) {
+            this.currentIndex--;
+            const state = this.history[this.currentIndex];
+            this.editor.editorEl.innerHTML = state.html;
+            if (this.editor.restoreCaret) {
+                this.editor.restoreCaret(state.caretPos);
+            }
+            console.log('[UndoManager] Undo applied. Index:', this.currentIndex);
+        } else {
+            console.log('[UndoManager] Nothing to undo');
+        }
     },
 
     redo() {
-        if (!this.editor || !this.editor.editorEl) return false;
-        if (this.currentIndex >= this.history.length - 1) {
-            // console.log('[UndoManager] Nothing to redo.');
-            return false;
+        if (!this.editor || !this.editor.editorEl) {
+            console.warn('[UndoManager] Cannot redo - editor or editorEl not available');
+            return;
         }
 
-        this.currentIndex++;
-        const nextState = this.history[this.currentIndex];
-        this.editor.editorEl.innerHTML = nextState.html;
-        this.editor.restoreCaret(nextState.caret);
-        console.log(`[UndoManager] Redo performed. Index: ${this.currentIndex}, Operation: ${this.history[this.currentIndex]?.operation || 'unknown'}`);
-        this.editor.updateCaretDisplayAndSave(); // Update display after redo
-        this.editor.applyFocusAndSave(nextState.caret, true); // Re-apply focus
-        return true;
+        if (this.currentIndex < this.history.length - 1) {
+            this.currentIndex++;
+            const state = this.history[this.currentIndex];
+            this.editor.editorEl.innerHTML = state.html;
+            if (this.editor.restoreCaret) {
+                this.editor.restoreCaret(state.caretPos);
+            }
+            console.log('[UndoManager] Redo applied. Index:', this.currentIndex);
+        } else {
+            console.log('[UndoManager] Nothing to redo');
+        }
     },
 
     // Call this method after custom DOM transformations that should be undoable
     handleCustomChange(operationType) {
-        // console.log(`[UndoManager] handleCustomChange called for: ${operationType}`);
+        console.log('[UndoManager] Custom change detected:', operationType);
+        if (!this.editor || !this.editor.editorEl) {
+            console.warn('[UndoManager] Cannot handle custom change - editor or editorEl not available');
+            return;
+        }
         this.recordState(operationType);
     },
 
@@ -91,9 +118,9 @@ const undoManager = {
      * Clear the undo/redo history stack
      */
     clearHistory() {
-        this.history = [];
-        this.historyIndex = -1;
         console.log('[UndoManager] History cleared');
+        this.history = [];
+        this.currentIndex = -1;
     },
 };
 

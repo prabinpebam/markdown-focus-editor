@@ -55,8 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // After content is loaded by storage.loadSettings(), record the initial state.
     // This assumes storage.loadSettings() synchronously updates editor.editorEl.innerHTML
     // If it's asynchronous, this call needs to be after the async operation completes.
-    editor.undoManager.recordInitialState(); 
-    console.log('[App] Initial editor state recorded for undo system');
+    setTimeout(() => {
+        if (editor.undoManager && editor.editorEl) {
+            editor.undoManager.recordInitialState(); 
+            console.log('[App] Initial editor state recorded for undo system');
+        } else {
+            console.error('[App] Cannot record initial state - undoManager or editorEl missing');
+        }
+    }, 100);
     
     console.log('[App] Initialization complete');
 });

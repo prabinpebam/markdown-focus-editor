@@ -53,6 +53,8 @@ const editor = {
         });
         sel.removeAllRanges();
         sel.addRange(range);
+        
+        console.log('[CURSOR-LOG] Editor.handlePaste - CURSOR SET - Target:', lastNodeInserted, 'Offset:', lastNodeInserted.length);
 
         if (this.undoManager) {
             this.undoManager.handleCustomChange('pasteText');
@@ -258,7 +260,7 @@ const editor = {
                         newRange.selectNodeContents(styledElement);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log(`[Editor] Selected content inside ${styleType} tag after styling.`);
+                        console.log(`[CURSOR-LOG] Editor.handleKeyDown (${styleType}) - SELECTION SET - Target:`, styledElement, 'Selected content');
                     } else {
                         // If no text was selected originally, just place cursor inside the tag
                         if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
@@ -272,7 +274,7 @@ const editor = {
                         newRange.collapse(true);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log(`[Editor] Placed cursor inside ${styleType} tag.`);
+                        console.log(`[CURSOR-LOG] Editor.handleKeyDown (${styleType}) - CURSOR SET - Target:`, newRange.startContainer, 'Offset:', newRange.startOffset);
                     }
                 }
                 
@@ -393,7 +395,7 @@ const editor = {
                         newRange.selectNodeContents(styledElement);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log('[Editor] Selected content inside strikethrough tag after styling.');
+                        console.log('[CURSOR-LOG] Editor.handleKeyDown (strikethrough) - SELECTION SET - Target:', styledElement, 'Selected content');
                     } else {
                         // Place cursor inside strikethrough element
                         if (styledElement.lastChild && styledElement.lastChild.nodeType === Node.TEXT_NODE) {
@@ -407,7 +409,7 @@ const editor = {
                         newRange.collapse(true);
                         currentSel.removeAllRanges();
                         currentSel.addRange(newRange);
-                        console.log('[Editor] Placed cursor inside strikethrough tag.');
+                        console.log('[CURSOR-LOG] Editor.handleKeyDown (strikethrough) - CURSOR SET - Target:', newRange.startContainer, 'Offset:', newRange.startOffset);
                     }
                 }
                 
@@ -552,6 +554,7 @@ const editor = {
 
         // Capture caret position *before* any potential transformation
         const absCaretPosBeforeTransform = this.getAbsoluteCaretPosition();
+        console.log('[CURSOR-LOG] Editor.handleInputFormatting - BEFORE transformation - absCaretPos:', absCaretPosBeforeTransform);
 
         setTimeout(() => {
             const sel = window.getSelection();
@@ -560,6 +563,8 @@ const editor = {
             let offsetInTextNode = 0;
 
             if (sel && sel.anchorNode) {
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - sel.anchorNode:', sel.anchorNode, 'nodeType:', sel.anchorNode.nodeType, 'nodeName:', sel.anchorNode.nodeName);
+                
                 blockToProcess = sel.anchorNode;
                 while (blockToProcess && blockToProcess.parentNode !== this.editorEl) {
                     blockToProcess = blockToProcess.parentNode;
@@ -570,6 +575,7 @@ const editor = {
                      blockToProcess = this.editorEl.childNodes[sel.anchorOffset] || this.editorEl.lastChild;
                 }
 
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - blockToProcess after logic:', blockToProcess, 'tagName:', blockToProcess?.tagName, 'textContent:', blockToProcess?.textContent);
 
                 if (sel.anchorNode.nodeType === Node.TEXT_NODE) {
                     textNodeForInline = sel.anchorNode;
@@ -580,7 +586,11 @@ const editor = {
             let transformationOccurred = false;
             
             if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - ATTEMPTING block transformation on:', blockToProcess.tagName, 'with content:', JSON.stringify(blockToProcess.textContent));
                 transformationOccurred = this.attemptBlockTransformations(blockToProcess, sel.anchorNode, sel.anchorOffset);
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - Block transformation result:', transformationOccurred);
+            } else {
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - NO block transformation attempted. blockToProcess:', blockToProcess, 'parentNode:', blockToProcess?.parentNode, 'editorEl:', this.editorEl);
             }
 
             if (!transformationOccurred && textNodeForInline && this.inlineStyleManager) {
@@ -595,8 +605,10 @@ const editor = {
             }
 
             if (transformationOccurred) {
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - AFTER transformation - calling applyFocusAndSave with current pos');
                 this.applyFocusAndSave(this.getAbsoluteCaretPosition(), true); 
             } else {
+                console.log('[CURSOR-LOG] Editor.handleInputFormatting - NO transformation - calling applyFocusAndSave with original pos:', absCaretPosBeforeTransform);
                 this.applyFocusAndSave(absCaretPosBeforeTransform, false); 
             }
             this.lastLogTrigger = null;
@@ -637,19 +649,26 @@ const editor = {
     },
 
     attemptBlockTransformations(blockNode, originalAnchorNode, originalAnchorOffset) {
+        console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - CALLED with blockNode:', blockNode, 'tagName:', blockNode?.tagName);
+        
         if (!blockNode || blockNode.nodeType !== Node.ELEMENT_NODE) {
+            console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - EARLY RETURN: invalid blockNode');
             return false;
         }
 
         // Only attempt transformations on DIVs for now
         if (blockNode.tagName !== 'DIV') {
+            console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - EARLY RETURN: not a DIV, tagName:', blockNode.tagName);
             return false;
         }
 
         const textContent = blockNode.textContent;
+        console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - textContent:', JSON.stringify(textContent));
         
         // Try heading transformation first
         let transformed = headingManager.tryTransformToHeading(blockNode, textContent, originalAnchorNode, originalAnchorOffset);
+        console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - heading transformation result:', transformed);
+        
         // headingManager.tryTransformToHeading should call undoManager if successful
         if (transformed) {
             return true;
@@ -658,16 +677,19 @@ const editor = {
         // Try list transformation if heading transformation didn't occur
         const ulMatch = textContent.match(listManager.ulMarkerRegex);
         if (ulMatch) {
+            console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - UL match found, converting to list');
             // listManager.convertBlockToList should call undoManager if successful
             return listManager.convertBlockToList(blockNode, ulMatch, 'ul');
         }
 
         const olMatch = textContent.match(listManager.olMarkerRegex);
         if (olMatch) {
+            console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - OL match found, converting to list');
             // listManager.convertBlockToList should call undoManager if successful
             return listManager.convertBlockToList(blockNode, olMatch, 'ol');
         }
         
+        console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - NO transformation applied');
         return false; // No transformation occurred
     },
 
@@ -782,6 +804,8 @@ const editor = {
     },
 
     restoreCaret(abs) {
+        console.log('[CURSOR-LOG] Editor.restoreCaret - CALLED with abs position:', abs);
+        
         const blocks = this.getBlocks();
         let run = 0, targetBlock = null, innerOffset = 0;
 
@@ -813,6 +837,8 @@ const editor = {
                 }
             }
         }
+
+        console.log('[CURSOR-LOG] Editor.restoreCaret - Target block:', targetBlock, 'innerOffset:', innerOffset);
 
         let charCount = 0;
         let foundNode = null;
@@ -894,12 +920,15 @@ const editor = {
                 rng.collapse(true);
                 sel.removeAllRanges();
                 sel.addRange(rng);
+                console.log('[CURSOR-LOG] Editor.restoreCaret - CURSOR SET - Target:', foundNode, 'Offset:', offsetInNode);
             } catch (e) {
                 // fallback – at least focus the block
                 if (targetBlock) targetBlock.focus();
+                console.log('[CURSOR-LOG] Editor.restoreCaret - ERROR, fallback focus on:', targetBlock);
             }
         } else if (targetBlock) {
             targetBlock.focus(); // Fallback if no text node found
+            console.log('[CURSOR-LOG] Editor.restoreCaret - NO foundNode, fallback focus on:', targetBlock);
         }
     },
 

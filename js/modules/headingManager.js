@@ -6,12 +6,10 @@ const headingManager = {
         console.log('[HeadingManager] Initialized with editor instance');
     },
 
-    // Regex for heading markers
+    // Regex for heading markers - more flexible to catch "# " followed by anything
     // Group 1: Hash markers (e.g., "#", "##")
-    // Group 2: Space or ZWSP after markers
-    // Group 3: Text content after the marker and a space
-    headingRegex: /^(#{1,6})(?: |\u200B|\u00A0|\u2002|\u2003|\u2009)(.*)$/,
-
+    // Group 2: Text content after the marker and space (optional)
+    headingRegex: /^(#{1,6}) (.*)$/,
 
     /**
      * Attempts to transform a block node (typically a DIV) to a heading if it matches heading syntax.
@@ -22,17 +20,29 @@ const headingManager = {
      * @returns {boolean} - True if transformation occurred, false otherwise.
      */
     tryTransformToHeading(blockNode, textContent, originalAnchorNode, originalAnchorOffset) {
+        console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - CALLED with blockNode:', blockNode, 'tagName:', blockNode?.tagName);
+        console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - textContent:', JSON.stringify(textContent));
+        console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - originalAnchorNode:', originalAnchorNode, 'originalAnchorOffset:', originalAnchorOffset);
+        
         if (!this.editor || blockNode.tagName !== 'DIV') {
+            console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - EARLY RETURN: editor or tagName check failed. editor:', this.editor, 'tagName:', blockNode.tagName);
             return false;
         }
 
         const headingMatch = textContent.match(this.headingRegex);
+        console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - headingRegex:', this.headingRegex);
+        console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - headingMatch:', headingMatch);
+        
         if (headingMatch) {
+            console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - MATCH FOUND! Groups:', headingMatch);
+            
             // Determine the text node for caret positioning. This logic might need to be robust.
             // It assumes originalAnchorNode is a text node within blockNode or blockNode.firstChild is.
             let textNodeForCaret = (originalAnchorNode && originalAnchorNode.nodeType === Node.TEXT_NODE && blockNode.contains(originalAnchorNode)) 
                                    ? originalAnchorNode 
                                    : (blockNode.firstChild && blockNode.firstChild.nodeType === Node.TEXT_NODE ? blockNode.firstChild : null);
+            
+            console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - textNodeForCaret:', textNodeForCaret);
             
             // If no suitable text node is found directly, and the block is simple (e.g. div with just text),
             // we might need to create one or ensure one exists if blockNode.firstChild isn't text.
@@ -47,6 +57,8 @@ const headingManager = {
             // Let's assume for now textNodeForCaret will be valid if a heading match occurs in a simple div.
             console.warn('[headingManager] Could not find a suitable text node for caret placement during heading transformation.');
             return false; 
+        } else {
+            console.log('[CURSOR-LOG] HeadingManager.tryTransformToHeading - NO MATCH with regex');
         }
         return false;
     },
@@ -60,8 +72,10 @@ const headingManager = {
      * @returns {boolean} - True if transformation occurred.
      */
     transformToHeadingElement(divBlock, match, textNodeBeingEdited, caretOffsetInTextNode) {
+        console.log('[CURSOR-LOG] HeadingManager.transformToHeadingElement - START - caretOffsetInTextNode:', caretOffsetInTextNode);
+        
         const level = match[1].length;
-        // Corrected: Group 2 contains the content after the marker and space.
+        // Group 2 contains the content after the marker and space.
         // Ensure rawBody is an empty string if match[2] is undefined (e.g. if (.*) matches nothing).
         const rawBody = match[2] || ''; 
         const hBodyContent = '\u200B' + rawBody; // Prepend ZWSP
@@ -86,7 +100,7 @@ const headingManager = {
         const sel = window.getSelection();
         if (sel) {
             // Calculate the length of the typed markdown prefix (e.g., "# " is 2 chars)
-            const matchedMarkerAndSpaceLength = match[1].length + 1 // +1 for the space/ZWSP
+            const matchedMarkerAndSpaceLength = match[1].length + 1; // +1 for the space
             
             // Adjust caretOffsetInTextNode relative to the start of the raw body content
             let caretOffsetInRawBody = caretOffsetInTextNode - matchedMarkerAndSpaceLength;
@@ -95,9 +109,14 @@ const headingManager = {
             // New offset in hTextNode will be 1 (for ZWSP) + caretOffsetInRawBody
             let newOffsetInHTextNode = 1 + caretOffsetInRawBody; 
             newOffsetInHTextNode = Math.min(newOffsetInHTextNode, hTextNode.data.length); // Clamp to hTextNode length
-            // Ensure newOffsetInHTextNode is at least 0. Given it's 1 + nonNegative, it should be >= 1.
-            // However, to be safe and match original logic closely:
-            newOffsetInHTextNode = Math.max(0, newOffsetInHTextNode); // Ensure non-negative (should be at least 1 due to ZWSP)
+            newOffsetInHTextNode = Math.max(1, newOffsetInHTextNode); // Ensure at least 1 (after ZWSP)
+
+            console.log('[CURSOR-LOG] HeadingManager.transformToHeadingElement - CALCULATION:');
+            console.log('  matchedMarkerAndSpaceLength:', matchedMarkerAndSpaceLength);
+            console.log('  caretOffsetInRawBody:', caretOffsetInRawBody);
+            console.log('  newOffsetInHTextNode:', newOffsetInHTextNode);
+            console.log('  hTextNode.data.length:', hTextNode.data.length);
+            console.log('  hTextNode.data:', JSON.stringify(hTextNode.data));
 
             try {
                 const rng = document.createRange();
@@ -105,8 +124,19 @@ const headingManager = {
                 rng.collapse(true);
                 sel.removeAllRanges();
                 sel.addRange(rng);
+                
+                console.log('[CURSOR-LOG] HeadingManager.transformToHeadingElement - CURSOR SET - Target:', hTextNode, 'Offset:', newOffsetInHTextNode);
+                
+                // Verify the cursor position was actually set
+                setTimeout(() => {
+                    const verifySelection = window.getSelection();
+                    if (verifySelection && verifySelection.anchorNode) {
+                        console.log('[CURSOR-LOG] HeadingManager.transformToHeadingElement - VERIFY (after 0ms) - AnchorNode:', verifySelection.anchorNode, 'Offset:', verifySelection.anchorOffset);
+                    }
+                }, 0);
+                
             } catch (e) {
-                console.error('[headingManager] Error setting caret after heading transformation:', e);
+                console.error('[CURSOR-LOG] HeadingManager.transformToHeadingElement - ERROR setting caret:', e);
                 h.focus(); // Fallback focus
             }
         }
@@ -138,6 +168,8 @@ const headingManager = {
 
 
             if (broken) {
+                console.log('[CURSOR-LOG] HeadingManager.checkAndRevertBrokenHeadings - REVERTING heading:', h.tagName);
+                
                 // Reconstruct the original text content (marker + body, removing ZWSP if present)
                 const body = isTextNode ? n.data.replace(/^[\u200B]/, '') : '';
                 
@@ -165,6 +197,8 @@ const headingManager = {
                     rng.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(rng);
+                    
+                    console.log('[CURSOR-LOG] HeadingManager.checkAndRevertBrokenHeadings - CURSOR SET - Target:', tn, 'Offset:', caretPosInDiv);
                 }
             }
         }

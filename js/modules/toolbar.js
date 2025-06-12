@@ -1,6 +1,6 @@
 import storage from './storage.js';
+import documentStore from './documentStore.js'; // Add this import
 import editor from './editor.js';
-import documentStore from './documentStore.js';
 
 const toolbar = {
     toolbarElement: null, // This is the main #toolbar div which is the activator
@@ -176,45 +176,43 @@ const toolbar = {
     },
 
     createNewDocument() {
-        // Clear the current document ID to indicate we're creating a new document
-        localStorage.removeItem('currentDocId');
+        console.log('[Toolbar] Creating new document');
         
-        // Create a new empty document
-        const newDoc = new documentStore.Document(
-            null, // Generate a new ID
-            'Untitled Document', // Default name
-            '', // Empty content
-            null, // Generated timestamp for createdAt
-            null  // Generated timestamp for lastEditedAt
-        );
-        
-        // Save the new document
-        const savedDoc = documentStore.saveDocument(newDoc);
-        
-        // Set it as the current document
-        localStorage.setItem('currentDocId', savedDoc.id);
-        
-        // Clear the editor
+        // Clear editor content first
         if (editor.editorEl) {
-            editor.editorEl.innerHTML = '';
-            
-            // Reset the undo manager if it exists
-            if (editor.undoManager) {
-                if (typeof editor.undoManager.clearHistory === 'function') {
-                    editor.undoManager.clearHistory();
-                }
-                editor.undoManager.recordInitialState();
-            }
+            editor.editorEl.innerHTML = '<div><br></div>';
+            editor.editorEl.focus();
         }
         
-        // Update document title in the UI
-        document.title = 'Untitled Document - Markdown Focus Editor';
+        // Clear undo history
+        if (editor.undoManager) {
+            editor.undoManager.clearHistory();
+        }
         
-        console.log(`[Toolbar] Created new document with ID: ${savedDoc.id}`);
+        // Create new document in storage - check if documentStore exists and has the method
+        try {
+            if (typeof documentStore !== 'undefined' && documentStore && typeof documentStore.createNewDocument === 'function') {
+                documentStore.createNewDocument();
+            } else {
+                console.warn('[Toolbar] documentStore not available or createNewDocument method missing');
+            }
+        } catch (error) {
+            console.error('[Toolbar] Error calling documentStore.createNewDocument:', error);
+        }
         
-        // Close the toolbar after action
-        this.closeToolbar();
-    }
+        // Record initial state after everything is set up
+        setTimeout(() => {
+            if (editor.undoManager && editor.editorEl) {
+                editor.undoManager.recordInitialState();
+                console.log('[Toolbar] Initial state recorded for new document');
+            }
+        }, 50);
+        
+        // Update focus if available
+        if (editor.focusMode) {
+            editor.focusMode.updateFocusIfActive();
+        }
+    },
 };
 
 export default toolbar;
