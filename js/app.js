@@ -7,12 +7,16 @@ import utils from './modules/utils.js';
 import undoManager from './modules/undoManager.js'; // Correctly import default
 import inlineStyleManager from './modules/inlineStyleManager.js'; // Import new manager
 import focusMode from './modules/focusMode.js'; // Import focus mode module
-import documentStore from './modules/documentStore.js'; // Import document store module
-import modalManager from './modules/modalManager.js'; // Import modal manager module
+import documentStore from './modules/documentStore.js'; // Ensure this is imported
+import modalManager from './modules/modalManager.js'; // Ensure this is imported
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] DOM content loaded, initializing modules');
     
+    // Initialize document store early, as other modules might depend on it.
+    // documentStore itself doesn't have an init(), it's an object literal.
+    // So, just by importing it, it's "available".
+
     // Initialize editor functionality (handles caret, markdown formatting & focus mode)
     editor.init();
     console.log('[App] Editor initialized');
@@ -45,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] FocusMode initialized and linked to editor');
 
     // Initialize the document modal manager
-    modalManager.init();
+    modalManager.init(); // Ensure modalManager is initialized
     console.log('[App] ModalManager initialized');
 
     // Load persisted settings such as theme, font size, focus state, etc.
@@ -67,11 +71,26 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] Initialization complete');
 });
 
-// Add keyboard shortcut for Ctrl+O
+// Consolidated keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+    // Ctrl+O - Open document modal
     if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault();
-        // Open the document modal
-        modalManager.openModal();
+        console.log('[App] Ctrl+O pressed - opening modal');
+        // Import modalManager dynamically to avoid circular dependency
+        import('./modules/modalManager.js').then(module => {
+            const modalManager = module.default;
+            if (modalManager && modalManager.openModal) {
+                modalManager.openModal();
+            } else {
+                console.error('[App] ModalManager not available');
+            }
+        }).catch(err => {
+            console.error('[App] Error importing modalManager:', err);
+        });
+        return;
     }
+    
+    // Note: Other shortcuts (Ctrl+S, Ctrl+N, etc.) are handled in toolbar.js
+    // to avoid conflicts and ensure proper module encapsulation
 });

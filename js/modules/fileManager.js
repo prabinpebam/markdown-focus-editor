@@ -1,60 +1,61 @@
-import utils from './utils.js';
+// import utils from './utils.js'; // If utils are needed for other things
+import documentStore from './documentStore.js'; // For importing MD as new doc
+import editor from './editor.js'; // To update editor content
 
 const fileManager = {
     init() {
         this.editorEl = document.getElementById('editor');
-        const saveBtn = document.getElementById('save');
-        const openBtn = document.getElementById('open-file');
-        const fileInput = document.getElementById('file-input');
         
-        if (saveBtn) {
-            saveBtn.addEventListener('click', this.saveFile.bind(this));
+        // The main open/save buttons are now handled by toolbar.js and modalManager.js
+        // The #file-input is also likely handled by modalManager for specific import types.
+
+        // Optional: Keep drag-and-drop on editor for individual .md files (imports as new doc)
+        if (this.editorEl) {
+            this.editorEl.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Add visual cue if desired
+            });
+            this.editorEl.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type === 'text/markdown' || file.type === 'text/plain' || file.name.endsWith('.md'))) {
+                    this.importDroppedMdFile(file);
+                } else if (file && file.type === 'application/json' && file.name.includes('MD-focus-editor-backup')) {
+                    // Optionally, if a backup is dropped on editor, open the modal and pass the file to it
+                    // For now, this is handled by modal's own drag-drop.
+                    alert('Please drop backup files onto the "Open Document" modal.');
+                }
+            });
         }
-        
-        
-        // Instead, if we want fileManager to respond to file open events,
-        // listen for the custom event from modalManager:
-        document.addEventListener('loadDocument', (event) => {
-            const doc = event.detail.document;
-            if (doc && doc.content) {
-                // Handle loading the document content here
-                // This will be triggered by modalManager when a document is selected
-            }
-        });
-        
-        // Optional: implement drag-and-drop on editor
-        this.editorEl.addEventListener('dragover', (e) => {
-            e.preventDefault();
-        });
-        this.editorEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                this.readFile(file);
-            }
-        });
+        console.log('[FileManager] Initialized. MD drag-drop on editor enabled.');
     },
-    saveFile() {
-        const content = this.editorEl.innerText;
-        const blob = new Blob([content], { type: 'text/markdown' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'document.md';
-        a.click();
-        URL.revokeObjectURL(url);
-    },
-    openFile(event) {
-        const file = event.target.files[0];
-        if (file) this.readFile(file);
-    },
-    readFile(file) {
+
+    importDroppedMdFile(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
-            this.editorEl.innerText = e.target.result;
+            const content = e.target.result;
+            let name = file.name.replace(/\.(md|txt)$/i, '');
+            name = name || 'Dropped Document';
+            
+            // Create a new document in the store
+            const newDoc = documentStore.createNewDocument(name, content);
+            
+            // Load this new document into the editor
+            if (editor.editorEl) {
+                editor.editorEl.innerHTML = newDoc.content;
+                localStorage.setItem('currentDocId', newDoc.id);
+                if(editor.undoManager) editor.undoManager.recordInitialState();
+                if(editor.focusMode) editor.focusMode.updateFocusIfActive();
+                alert(`Document "${newDoc.name}" imported from dropped file and is now active.`);
+            }
         };
         reader.readAsText(file);
     }
+
+    // Old saveFile, openFile, readFile methods are removed as their primary
+    // functionality is now part of documentStore and modalManager.
 };
 
 export default fileManager;

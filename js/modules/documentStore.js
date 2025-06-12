@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'markdownDocs';
+const DOC_STORAGE_KEY = 'markdownFocusEditorDocs';
 
 /**
  * Generates a unique ID based on timestamp and a random suffix.
@@ -26,36 +26,12 @@ function generateTitleFromContent(content) {
 }
 
 /**
- * Represents a document.
- * @class
- * @param {string} id - Unique ID.
- * @param {string} name - Document name/title.
- * @param {string} content - Markdown content.
- * @param {string} [createdAt] - ISO date string of creation.
- * @param {string} [lastEditedAt] - ISO date string of last edit.
- */
-class Document {
-    constructor(id, name, content, createdAt, lastEditedAt) {
-        this.id = id || generateUniqueId();
-        this.content = content || '';
-        this.name = name || generateTitleFromContent(this.content);
-        const now = new Date().toISOString();
-        this.createdAt = createdAt || now;
-        this.lastEditedAt = lastEditedAt || now;
-    }
-}
-
-/**
  * Retrieves all documents from localStorage.
  * @returns {Document[]} An array of Document objects.
  */
-function getAllDocuments() {
-    const docsJson = localStorage.getItem(STORAGE_KEY);
-    if (docsJson) {
-        const docsArray = JSON.parse(docsJson);
-        return docsArray.map(doc => new Document(doc.id, doc.name, doc.content, doc.createdAt, doc.lastEditedAt));
-    }
-    return [];
+function getDocuments() {
+    const docsJson = localStorage.getItem(DOC_STORAGE_KEY);
+    return docsJson ? JSON.parse(docsJson) : [];
 }
 
 /**
@@ -63,7 +39,7 @@ function getAllDocuments() {
  * @param {Document[]} docsArray - An array of Document objects.
  */
 function _saveAllDocumentsToStorage(docsArray) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(docsArray));
+    localStorage.setItem(DOC_STORAGE_KEY, JSON.stringify(docsArray));
 }
 
 /**
@@ -72,7 +48,7 @@ function _saveAllDocumentsToStorage(docsArray) {
  * @returns {Document|null} The Document object or null if not found.
  */
 function getDocumentById(id) {
-    const docs = getAllDocuments();
+    const docs = getDocuments();
     return docs.find(doc => doc.id === id) || null;
 }
 
@@ -86,7 +62,7 @@ function getDocumentById(id) {
  * @returns {Document} The saved/updated Document object.
  */
 function saveDocument(docData) {
-    let docs = getAllDocuments();
+    let docs = getDocuments();
     const now = new Date().toISOString();
     let existingDoc = docData.id ? docs.find(d => d.id === docData.id) : null;
 
@@ -104,7 +80,13 @@ function saveDocument(docData) {
         // Add new document
         const newId = docData.id || generateUniqueId();
         const newName = docData.name || generateTitleFromContent(docData.content || '');
-        const newDoc = new Document(newId, newName, docData.content || '', now, now);
+        const newDoc = {
+            id: newId,
+            name: newName,
+            content: docData.content || '',
+            createdAt: now,
+            lastEdited: now,
+        };
         docs.push(newDoc);
         existingDoc = newDoc; // to return the newly created doc
     }
@@ -120,7 +102,7 @@ function saveDocument(docData) {
  * @returns {Document|null} The updated Document object or null if not found.
  */
 function updateDocumentTitle(id, newTitle) {
-    let docs = getAllDocuments();
+    let docs = getDocuments();
     const docIndex = docs.findIndex(doc => doc.id === id);
 
     if (docIndex > -1 && newTitle && typeof newTitle === 'string') {
@@ -138,7 +120,7 @@ function updateDocumentTitle(id, newTitle) {
  * @returns {boolean} True if deletion was successful, false otherwise.
  */
 function deleteDocument(id) {
-    let docs = getAllDocuments();
+    let docs = getDocuments();
     const initialLength = docs.length;
     docs = docs.filter(doc => doc.id !== id);
 
@@ -154,28 +136,166 @@ function deleteDocument(id) {
  * @returns {Object} {bytes: number, percent: number}
  */
 function getStorageUsage() {
-    const docs = getAllDocuments();
-    const docsJson = JSON.stringify(docs);
-    const storageSize = new Blob([docsJson]).size;
-    
-    // Calculate percentage of 5MB limit (localStorage typical limit)
-    const maxSize = 5 * 1024 * 1024; // 5MB in bytes
-    const percentage = Math.min(100, (storageSize / maxSize) * 100);
-    
+    const docsJson = localStorage.getItem(DOC_STORAGE_KEY);
+    const sizeInBytes = docsJson ? new TextEncoder().encode(docsJson).length : 0;
+    const totalDocs = docsJson ? JSON.parse(docsJson).length : 0;
     return {
-        bytes: storageSize,
-        percent: percentage
+        sizeInBytes: sizeInBytes,
+        totalDocs: totalDocs,
+        sizeInKB: (sizeInBytes / 1024).toFixed(2),
+        sizeInMB: (sizeInBytes / (1024 * 1024)).toFixed(2),
     };
 }
 
-export default {
-    Document, // Exporting class for potential type checking or direct instantiation if needed
-    generateUniqueId,
-    generateTitleFromContent,
-    getAllDocuments,
-    getDocumentById,
-    saveDocument,
-    updateDocumentTitle,
-    deleteDocument,
-    getStorageUsage // Add new utility function
+/**
+ * Imports documents from an external source.
+ * @param {Array} importedDocs - Array of documents to import.
+ * @param {Function} [conflictResolver] - Optional conflict resolution function.
+ * @returns {Object} Result of the import operation.
+ */
+function importDocuments(importedDocs, conflictResolver = (existing, imported) => imported) {
+    // Basic import, more complex conflict UI needed in modalManager
+    let currentDocs = getDocuments();
+    let newDocsAddedCount = 0;
+    let conflictedDocs = [];
+
+    importedDocs.forEach(importedDoc => {
+        const existingDocIndex = currentDocs.findIndex(d => d.id === importedDoc.id);
+        if (existingDocIndex > -1) {
+            // Conflict: For now, just an example. Real resolution will be UI driven.
+            // Store for UI resolution
+            conflictedDocs.push({ existing: currentDocs[existingDocIndex], imported: importedDoc });
+            // Simple strategy: replace (can be changed by conflictResolver)
+            // currentDocs[existingDocIndex] = conflictResolver(currentDocs[existingDocIndex], importedDoc);
+        } else {
+            currentDocs.push(importedDoc);
+            newDocsAddedCount++;
+        }
+    });
+    // saveDocuments(currentDocs); // Save will happen after UI resolution
+    console.log(`[DocumentStore] Import processed. New: ${newDocsAddedCount}, Conflicts: ${conflictedDocs.length}`);
+    return { currentDocs, newDocsAddedCount, conflictedDocs }; // Return for modalManager to handle UI
+}
+
+/**
+ * Saves documents after import or conflict resolution.
+ * @param {Array} docsToSave - Array of document objects to save.
+ */
+function saveImportedDocuments(docsToSave) {
+    _saveAllDocumentsToStorage(docsToSave);
+    console.log('[DocumentStore] Saved documents after import/conflict resolution.');
+}
+
+const documentStore = {
+    getAllDocuments() {
+        return getDocuments();
+    },
+
+    getDocuments() {
+        return getDocuments();
+    },
+
+    getDocumentById(id) {
+        const docs = getDocuments();
+        return docs.find(doc => doc.id === id) || null;
+    },
+
+    createNewDocument(name = 'Untitled Document', content = '<div><br></div>') {
+        const docs = getDocuments();
+        const now = new Date().toISOString();
+        const newDoc = {
+            id: generateUniqueId(),
+            name: name,
+            createdAt: now,
+            lastEdited: now,
+            content: content,
+        };
+        docs.push(newDoc);
+        _saveAllDocumentsToStorage(docs);
+        localStorage.setItem('currentDocId', newDoc.id);
+        console.log('[DocumentStore] Created new document:', newDoc.id, newDoc.name);
+        return newDoc;
+    },
+
+    updateDocument(id, updatedProps) {
+        let docs = getDocuments();
+        const docIndex = docs.findIndex(doc => doc.id === id);
+        if (docIndex > -1) {
+            docs[docIndex] = { ...docs[docIndex], ...updatedProps, lastEdited: new Date().toISOString() };
+            _saveAllDocumentsToStorage(docs);
+            console.log('[DocumentStore] Updated document:', id);
+            return docs[docIndex];
+        }
+        console.warn('[DocumentStore] Update failed: Document not found', id);
+        return null;
+    },
+
+    saveDocument(docToSave) {
+        if (!docToSave) {
+            console.warn('[DocumentStore] Save failed: Invalid document data');
+            return null;
+        }
+        
+        // If no ID, create new document
+        if (!docToSave.id) {
+            return this.createNewDocument(docToSave.name, docToSave.content);
+        }
+        
+        // Otherwise update existing
+        return this.updateDocument(docToSave.id, { name: docToSave.name, content: docToSave.content });
+    },
+
+    deleteDocument(id) {
+        let docs = getDocuments();
+        const initialLength = docs.length;
+        docs = docs.filter(doc => doc.id !== id);
+        if (docs.length < initialLength) {
+            _saveAllDocumentsToStorage(docs);
+            console.log('[DocumentStore] Deleted document:', id);
+            if (localStorage.getItem('currentDocId') === id) {
+                localStorage.removeItem('currentDocId');
+            }
+            return true;
+        }
+        console.warn('[DocumentStore] Delete failed: Document not found', id);
+        return false;
+    },
+
+    getStorageUsage() {
+        const docsJson = localStorage.getItem(DOC_STORAGE_KEY);
+        const sizeInBytes = docsJson ? new TextEncoder().encode(docsJson).length : 0;
+        const totalDocs = docsJson ? JSON.parse(docsJson).length : 0;
+        return {
+            sizeInBytes: sizeInBytes,
+            totalDocs: totalDocs,
+            sizeInKB: (sizeInBytes / 1024).toFixed(2),
+            sizeInMB: (sizeInBytes / (1024 * 1024)).toFixed(2),
+        };
+    },
+
+    importDocuments(importedDocs, conflictResolver = (existing, imported) => imported) {
+        let currentDocs = getDocuments();
+        let newDocsAddedCount = 0;
+        let conflictedDocs = [];
+
+        importedDocs.forEach(importedDoc => {
+            const existingDocIndex = currentDocs.findIndex(d => d.id === importedDoc.id);
+            if (existingDocIndex > -1) {
+                conflictedDocs.push({ existing: currentDocs[existingDocIndex], imported: importedDoc });
+            } else {
+                currentDocs.push(importedDoc);
+                newDocsAddedCount++;
+            }
+        });
+        
+        console.log(`[DocumentStore] Import processed. New: ${newDocsAddedCount}, Conflicts: ${conflictedDocs.length}`);
+        return { currentDocs, newDocsAddedCount, conflictedDocs };
+    },
+    
+    saveImportedDocuments(docsToSave) {
+        _saveAllDocumentsToStorage(docsToSave);
+        console.log('[DocumentStore] Saved documents after import/conflict resolution.');
+    }
 };
+
+export default documentStore;

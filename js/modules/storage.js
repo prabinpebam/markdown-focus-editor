@@ -37,28 +37,46 @@ const storage = {
         }
 
         // Check if there's a current document ID
-        const currentDocId = localStorage.getItem('currentDocId');
+        let currentDocId = localStorage.getItem('currentDocId');
+        let docToLoad = null;
+
         if (currentDocId) {
-            const doc = documentStore.getDocumentById(currentDocId);
-            if (doc && editorEl) {
-                editorEl.innerHTML = doc.content;
-                console.log(`[Storage] Loaded document with ID: ${currentDocId}`);
+            docToLoad = documentStore.getDocumentById(currentDocId);
+            if (docToLoad) {
+                console.log(`[Storage] Found current document by ID: ${currentDocId}`);
             } else {
-                // If document not found, clear the currentDocId
+                console.warn(`[Storage] Current document ID ${currentDocId} not found in store. Clearing.`);
                 localStorage.removeItem('currentDocId');
-                // Load last unsaved content as fallback
-                const lastContent = localStorage.getItem('lastContent');
+                currentDocId = null; // Ensure it's null for fallback logic
+            }
+        }
+
+        if (docToLoad && editorEl) {
+            editorEl.innerHTML = docToLoad.content;
+        } else {
+            // Fallback: No current valid doc, or no currentDocId at all
+            const allDocs = documentStore.getAllDocuments();
+            if (allDocs.length > 0) {
+                // Load the most recently edited document if no specific currentDocId or if it was invalid
+                const mostRecentDoc = allDocs.sort((a, b) => new Date(b.lastEdited) - new Date(a.lastEdited))[0];
+                if (mostRecentDoc && editorEl) {
+                    editorEl.innerHTML = mostRecentDoc.content;
+                    localStorage.setItem('currentDocId', mostRecentDoc.id);
+                    console.log(`[Storage] Loaded most recent document: ${mostRecentDoc.id}`);
+                }
+            } else {
+                // No documents in store, load lastContent if any, or default to blank
+                const lastContent = localStorage.getItem('lastContent'); // Legacy fallback
                 if (lastContent && editorEl) {
                     editorEl.innerHTML = lastContent;
-                    console.log(`[Storage] Loaded fallback content (${lastContent.length} chars)`);
+                    console.log(`[Storage] Loaded legacy lastContent (${lastContent.length} chars)`);
+                } else if (editorEl && editorEl.innerHTML.trim() === '') { // Only if editor is truly empty
+                    // If truly no content and no docs, create a first default document
+                    const firstDoc = documentStore.createNewDocument('My First Document', '<div>Welcome! Start typing here.<br></div>');
+                    editorEl.innerHTML = firstDoc.content;
+                     localStorage.setItem('currentDocId', firstDoc.id); // Already set by createNewDocument
+                    console.log('[Storage] Created and loaded first default document.');
                 }
-            }
-        } else {
-            // No current document, load last saved content
-            const lastContent = localStorage.getItem('lastContent');
-            if (lastContent && editorEl) {
-                editorEl.innerHTML = lastContent;
-                console.log(`[Storage] Loaded content (${lastContent.length} chars)`);
             }
         }
         // Note: editor.undoManager.recordInitialState(); in app.js handles initial undo state.
@@ -66,16 +84,24 @@ const storage = {
 
     saveSettings(key, value) {
         localStorage.setItem(key, value);
-        console.log(`[Storage] Saved setting: ${key} = ${key === 'lastContent' ? `(${value.length} chars)` : value}`);
+        // console.log(`[Storage] Saved setting: ${key} = ${key === 'lastContent' ? `(${value.length} chars)` : value}`);
         
-        // If saving content and we have a current document ID, update the document
-        if (key === 'lastContent' && localStorage.getItem('currentDocId')) {
-            const docId = localStorage.getItem('currentDocId');
-            const doc = documentStore.getDocumentById(docId);
-            if (doc) {
-                doc.content = value;
-                documentStore.saveDocument(doc);
-                console.log(`[Storage] Updated document ID: ${docId} with new content`);
+        // If saving content (which editor.js calls 'lastContent'), update the current document
+        if (key === 'lastContent') {
+            const currentDocId = localStorage.getItem('currentDocId');
+            if (currentDocId) {
+                const success = documentStore.updateDocument(currentDocId, { content: value });
+                if (success) {
+                    // console.log(`[Storage] Updated document ID: ${currentDocId} with new content`);
+                } else {
+                    // console.warn(`[Storage] Failed to update document ID: ${currentDocId}. It might have been deleted.`);
+                    // Potentially create a new doc with this content if currentDocId is invalid
+                }
+            } else {
+                // No current document ID - this content is "unsaved" or belongs to a new unsaved doc.
+                // The main "Save" button logic in toolbar should handle creating a new doc if needed.
+                // For auto-save, this 'lastContent' key acts as a buffer for unsaved work if no doc is active.
+                console.log('[Storage] Content saved to lastContent (no active document).');
             }
         }
     }

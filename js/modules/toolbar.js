@@ -1,218 +1,303 @@
 import storage from './storage.js';
-import documentStore from './documentStore.js'; // Add this import
+import documentStore from './documentStore.js';
 import editor from './editor.js';
+import theme from './theme.js';
 
 const toolbar = {
-    toolbarElement: null, // This is the main #toolbar div which is the activator
-    // toolbarActivatorDot: null, // Not directly manipulated by JS for its primary animation
-    // toolbarContent: null, // Buttons are direct children of toolbarElement now
-    isToolbarActive: false,
+    editorEl: null,
+    saveBtn: null,
+    openBtn: null,
+    newDocBtn: null,
+    increaseFontBtn: null,
+    decreaseFontBtn: null,
+    toggleThemeBtn: null,
+    fullscreenBtn: null,
+    toolbarElement: null,
+    toolbarActivatorDot: null,
+    isExpanded: false,
 
     init() {
-        this.toolbarElement = document.getElementById('toolbar'); 
-        // this.toolbarContent = document.getElementById('toolbar'); // Redundant, toolbarElement is the container
+        console.log('[Toolbar] Initializing...');
+        
+        this.editorEl = document.getElementById('editor');
+        this.toolbarElement = document.getElementById('toolbar');
+        this.toolbarActivatorDot = document.getElementById('toolbar-activator-dot');
+        this.saveBtn = document.getElementById('save');
+        this.openBtn = document.getElementById('open-file');
+        this.newDocBtn = document.getElementById('new-document');
+        this.increaseFontBtn = document.getElementById('increase-font');
+        this.decreaseFontBtn = document.getElementById('decrease-font');
+        this.toggleThemeBtn = document.getElementById('toggle-theme');
+        this.fullscreenBtn = document.getElementById('fullscreen');
 
-        this.newDocumentButton = document.getElementById('new-document');
-        this.openFileButton = document.getElementById('open-file');
-        this.increaseFontButton = document.getElementById('increase-font');
-        this.decreaseFontButton = document.getElementById('decrease-font');
-        this.fullscreenButton = document.getElementById('fullscreen');
-        this.baseFontSize = 16;
+        // Setup toolbar expansion/collapse
+        this.setupToolbarToggle();
 
-        if (this.toolbarElement) {
-            this.toolbarElement.addEventListener('click', (event) => {
-                // If the toolbar is NOT active, a click on it should open it.
-                if (!this.isToolbarActive) {
-                    // Check if the click was directly on the toolbarElement (the activator area)
-                    // or on the dot (which has pointer-events: none, so click goes to parent).
-                    // This condition ensures that if somehow a button inside was clicked while
-                    // isToolbarActive is false (which shouldn't happen due to CSS), it doesn't open.
-                    // A simpler check: if it's not active, any click on it should try to open.
-                    event.stopPropagation(); // Important to prevent immediate close by document listener
-                    this.openToolbar();
-                }
-                // If the toolbar IS active, clicks on its children (buttons) should be handled by their own
-                // listeners. Clicks on the toolbar's padding area (if any) should not close it.
-                // The closing is handled by the document click listener for clicks *outside*.
+        // Bind event listeners
+        if (this.saveBtn) {
+            this.saveBtn.addEventListener('click', () => this.handleSave());
+            console.log('[Toolbar] Save button listener added');
+        }
+        
+        if (this.openBtn) {
+            this.openBtn.addEventListener('click', () => {
+                console.log('[Toolbar] Open button clicked');
+                this.handleOpen();
             });
+            console.log('[Toolbar] Open button listener added');
+        }
+        
+        if (this.newDocBtn) {
+            this.newDocBtn.addEventListener('click', () => this.createNewDocument());
+            console.log('[Toolbar] New document button listener added');
+        }
+        
+        if (this.increaseFontBtn) {
+            this.increaseFontBtn.addEventListener('click', () => this.adjustFontSize(2));
+        }
+        
+        if (this.decreaseFontBtn) {
+            this.decreaseFontBtn.addEventListener('click', () => this.adjustFontSize(-2));
+        }
+        
+        if (this.toggleThemeBtn) {
+            this.toggleThemeBtn.addEventListener('click', () => this.handleThemeToggle());
+        }
+        
+        if (this.fullscreenBtn) {
+            this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
         }
 
-        // Initialize New Document button
-        if (this.newDocumentButton) {
-            this.newDocumentButton.addEventListener('click', () => this.createNewDocument());
+        // Add keyboard shortcuts
+        this.setupKeyboardShortcuts();
+        
+        console.log('[Toolbar] Initialized successfully');
+    },
+
+    setupToolbarToggle() {
+        if (!this.toolbarElement) {
+            console.error('[Toolbar] Toolbar element not found');
+            return;
         }
 
-        // Initialize Open Document button - FIX: Only dispatch the custom event
-        if (this.openFileButton) {
-            // Remove any existing click handlers by cloning and replacing
-            const newOpenFileButton = this.openFileButton.cloneNode(true);
-            this.openFileButton.parentNode.replaceChild(newOpenFileButton, this.openFileButton);
-            this.openFileButton = newOpenFileButton;
+        // Click on toolbar to toggle expansion
+        this.toolbarElement.addEventListener('click', (e) => {
+            // Don't toggle if clicking on buttons or their children
+            if (e.target.closest('button') || e.target.closest('label') || e.target.closest('input')) {
+                return;
+            }
             
-            // Add clean click handler that ONLY dispatches the custom event
-            this.openFileButton.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                // Use dynamic import to avoid circular dependencies
-                import('./modalManager.js').then(module => {
-                    const modalManager = module.default;
-                    modalManager.openModal();
-                }).catch(err => {
-                    console.error('Error loading modalManager:', err);
-                });
-            });
-        }
+            console.log('[Toolbar] Toolbar clicked, toggling expansion');
+            this.toggleToolbar();
+        });
 
-        if (this.increaseFontButton) {
-            this.increaseFontButton.addEventListener('click', () => this.changeFontSize(2));
-        }
-        if (this.decreaseFontButton) {
-            this.decreaseFontButton.addEventListener('click', () => this.changeFontSize(-2));
-        }
-        if (this.fullscreenButton) { // Add event listener for fullscreen
-            this.fullscreenButton.addEventListener('click', () => this.toggleFullscreen());
-        }
+        // Close toolbar when clicking outside
+        document.addEventListener('click', (e) => {
+            if (this.isExpanded && !this.toolbarElement.contains(e.target)) {
+                console.log('[Toolbar] Clicked outside, collapsing toolbar');
+                this.collapseToolbar();
+            }
+        });
 
-        // Add keyboard shortcut for new document (Ctrl+N)
+        // Initial state - collapsed (CSS handles this by default)
+        this.isExpanded = false;
+    },
+
+    toggleToolbar() {
+        if (this.isExpanded) {
+            this.collapseToolbar();
+        } else {
+            this.expandToolbar();
+        }
+    },
+
+    expandToolbar() {
+        if (!this.toolbarElement) return;
+        
+        // Use the CSS class that's already defined
+        this.toolbarElement.classList.add('is-toolbar-active');
+        this.isExpanded = true;
+        console.log('[Toolbar] Toolbar expanded');
+    },
+
+    collapseToolbar() {
+        if (!this.toolbarElement) return;
+        
+        // Remove the CSS class to collapse
+        this.toolbarElement.classList.remove('is-toolbar-active');
+        this.isExpanded = false;
+        console.log('[Toolbar] Toolbar collapsed');
+    },
+
+    setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
+            // Save - Ctrl+S
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                console.log('[Toolbar] Ctrl+S pressed');
+                this.handleSave();
+                return;
+            }
+            
+            // New Document - Ctrl+N
             if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
-                e.preventDefault(); // Prevent default browser action
+                e.preventDefault();
+                console.log('[Toolbar] Ctrl+N pressed');
                 this.createNewDocument();
+                return;
+            }
+            
+            // Save As - Ctrl+Shift+S
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+                e.preventDefault();
+                console.log('[Toolbar] Ctrl+Shift+S pressed');
+                this.promptAndSaveNewDocument(this.editorEl ? this.editorEl.innerHTML : '');
+                return;
             }
         });
+        console.log('[Toolbar] Keyboard shortcuts set up');
+    },
 
-        document.addEventListener('click', (event) => {
-            if (this.isToolbarActive && this.toolbarElement) {
-                // If toolbar is active and click is outside the toolbarElement
-                if (!this.toolbarElement.contains(event.target)) {
-                    this.closeToolbar();
-                }
+    handleOpen() {
+        console.log('[Toolbar] handleOpen called');
+        // Import modalManager dynamically to avoid circular dependency
+        import('./modalManager.js').then(module => {
+            const modalManager = module.default;
+            if (modalManager && modalManager.openModal) {
+                console.log('[Toolbar] Opening modal via modalManager');
+                modalManager.openModal();
+            } else {
+                console.error('[Toolbar] ModalManager not available or openModal method missing');
             }
+        }).catch(err => {
+            console.error('[Toolbar] Error importing modalManager:', err);
         });
-
-        // Listen for fullscreen changes to update button state
-        document.addEventListener('fullscreenchange', () => this.updateFullscreenButton());
-        document.addEventListener('webkitfullscreenchange', () => this.updateFullscreenButton());
-        document.addEventListener('mozfullscreenchange', () => this.updateFullscreenButton());
-        document.addEventListener('MSFullscreenChange', () => this.updateFullscreenButton());
     },
 
-    openToolbar() {
-        if (this.toolbarElement && !this.isToolbarActive) {
-            this.toolbarElement.classList.add('is-toolbar-active');
-            this.isToolbarActive = true;
-            console.log('[Toolbar] Opened toolbar');
-        }
-    },
+    handleSave() {
+        console.log('[Toolbar] Save button clicked.');
+        const currentDocId = localStorage.getItem('currentDocId');
+        const content = this.editorEl ? this.editorEl.innerHTML : '';
 
-    closeToolbar() {
-        if (this.toolbarElement && this.isToolbarActive) {
-            this.toolbarElement.classList.remove('is-toolbar-active');
-            this.isToolbarActive = false;
-            console.log('[Toolbar] Closed toolbar');
-        }
-    },
-
-    toggleFullscreen() {
-        if (!document.fullscreenElement &&
-            !document.mozFullScreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) { // Standard, Firefox, Chrome/Safari/Opera, IE/Edge
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen();
-            } else if (document.documentElement.mozRequestFullScreen) { /* Firefox */
-                document.documentElement.mozRequestFullScreen();
-            } else if (document.documentElement.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
-                document.documentElement.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
-            } else if (document.documentElement.msRequestFullscreen) { /* IE/Edge */
-                document.documentElement.msRequestFullscreen();
+        if (currentDocId) {
+            const currentDoc = documentStore.getDocumentById(currentDocId);
+            if (currentDoc) {
+                documentStore.updateDocument(currentDocId, { content: content });
+                this.showSaveNotification(`Document "${currentDoc.name}" saved.`);
+            } else {
+                this.promptAndSaveNewDocument(content);
             }
         } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.mozCancelFullScreen) { /* Firefox */
-                document.mozCancelFullScreen();
-            } else if (document.webkitExitFullscreen) { /* Chrome, Safari and Opera */
-                document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) { /* IE/Edge */
-                document.msExitFullscreen();
-            }
-        }
-        // The updateFullscreenButton method will be called by the 'fullscreenchange' event
-    },
-
-    updateFullscreenButton() {
-        if (!this.fullscreenButton || !this.fullscreenButton.querySelector('img')) return;
-
-        const img = this.fullscreenButton.querySelector('img');
-        if (document.fullscreenElement || document.mozFullScreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
-            img.src = 'images/fullscreen-exit.svg'; // Assume you have an exit icon
-            img.alt = 'Exit Fullscreen';
-            this.fullscreenButton.title = 'Exit Fullscreen';
-        } else {
-            img.src = 'images/fullscreen.svg';
-            img.alt = 'Toggle Fullscreen';
-            this.fullscreenButton.title = 'Toggle Fullscreen';
+            this.promptAndSaveNewDocument(content);
         }
     },
-
-    changeFontSize(delta) {
-        let currentSize = parseInt(getComputedStyle(document.body).getPropertyValue('--base-font'), 10) || this.baseFontSize;
-        let newSize = currentSize + delta;
-        newSize = Math.max(8, Math.min(newSize, 48)); // Clamp between 8px and 48px
-        this.setFontSize(newSize);
-    },
-
-    setFontSize(size) {
-        document.body.style.setProperty('--base-font', `${size}px`);
-        this.baseFontSize = size; // Update internal tracking
-        storage.saveSettings('fontSize', size);
-        console.log(`[Toolbar] Font size changed to ${size}px`);
-        // If editor element directly uses font-size, update it too
-        if (editor.editorEl) {
-            // This might be redundant if editor's CSS inherits --base-font,
-            // but explicit set ensures it if editor has its own specific font-size rule.
-            // editor.editorEl.style.fontSize = `${size}px`;
+    
+    promptAndSaveNewDocument(content) {
+        let docName = prompt("Enter a name for your new document:", "Untitled Document");
+        if (docName === null) return; // User cancelled
+        docName = docName.trim() || "Untitled Document";
+        
+        const newDoc = documentStore.createNewDocument(docName, content);
+        localStorage.setItem('currentDocId', newDoc.id);
+        if (editor.undoManager) {
+            setTimeout(() => {
+                editor.undoManager.recordInitialState();
+            }, 50);
         }
+        this.showSaveNotification(`Document "${newDoc.name}" saved.`);
     },
 
     createNewDocument() {
-        console.log('[Toolbar] Creating new document');
+        console.log('[Toolbar] Creating new document via button');
         
-        // Clear editor content first
-        if (editor.editorEl) {
-            editor.editorEl.innerHTML = '<div><br></div>';
-            editor.editorEl.focus();
+        let docName = prompt("Enter a name for the new document:", "New Document");
+        if (docName === null) return; // User cancelled
+        docName = docName.trim() || "New Document";
+
+        const newDoc = documentStore.createNewDocument(docName, '<div><br></div>');
+        
+        if (this.editorEl) {
+            this.editorEl.innerHTML = newDoc.content;
+            this.editorEl.focus();
         }
         
-        // Clear undo history
+        localStorage.setItem('currentDocId', newDoc.id);
+        
         if (editor.undoManager) {
             editor.undoManager.clearHistory();
+            setTimeout(() => {
+                if (editor.undoManager && editor.editorEl) {
+                    editor.undoManager.recordInitialState();
+                    console.log('[Toolbar] Initial state recorded for new document');
+                }
+            }, 50);
         }
         
-        // Create new document in storage - check if documentStore exists and has the method
-        try {
-            if (typeof documentStore !== 'undefined' && documentStore && typeof documentStore.createNewDocument === 'function') {
-                documentStore.createNewDocument();
-            } else {
-                console.warn('[Toolbar] documentStore not available or createNewDocument method missing');
-            }
-        } catch (error) {
-            console.error('[Toolbar] Error calling documentStore.createNewDocument:', error);
-        }
+        console.log(`[Toolbar] New document "${newDoc.name}" created and activated.`);
         
-        // Record initial state after everything is set up
-        setTimeout(() => {
-            if (editor.undoManager && editor.editorEl) {
-                editor.undoManager.recordInitialState();
-                console.log('[Toolbar] Initial state recorded for new document');
-            }
-        }, 50);
-        
-        // Update focus if available
         if (editor.focusMode) {
             editor.focusMode.updateFocusIfActive();
         }
     },
+    
+    adjustFontSize(delta) {
+        if (!this.editorEl) return;
+        const currentSize = parseInt(window.getComputedStyle(this.editorEl).fontSize, 10);
+        const newSize = Math.max(8, currentSize + delta);
+        this.setFontSize(newSize);
+    },
+
+    setFontSize(size) {
+        if (this.editorEl) {
+            this.editorEl.style.fontSize = `${size}px`;
+            storage.saveSettings('fontSize', size.toString());
+            console.log(`[Toolbar] Font size set to ${size}px`);
+        }
+    },
+
+    handleThemeToggle() {
+        if (theme && theme.toggleTheme) {
+            theme.toggleTheme();
+        } else {
+            console.error('[Toolbar] Theme module not available');
+        }
+    },
+
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    },
+
+    showSaveNotification(message) {
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 4px;
+            z-index: 1000;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
 };
 
 export default toolbar;
