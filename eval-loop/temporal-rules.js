@@ -6,20 +6,30 @@
 // ── Rule 1: Block type transitions must follow allowed paths ──
 function checkBlockTypeTransitions(mutations) {
   const valid = {
-    div: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol'],
+    div: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'div.code-block', 'div.table-block'],
     h1: ['div'], h2: ['div'], h3: ['div'],
     h4: ['div'], h5: ['div'], h6: ['div'],
     ul: ['div'], ol: ['div'],
+    blockquote: ['div'],
+    'div.code-block': ['div'],
+    'div.table-block': ['div'],
     // span can appear transiently during heading reversion (marker becomes orphaned)
     span: ['div'],
   };
   // Also allow any tag → span (transient during DOM surgery)
   // Also allow any tag → br (browser empties the editor on Ctrl+A+Delete)
+  // Also allow blockquote/code-block/table-block transitions
   return mutations
     .filter((m) => m.field === 'type')
     .filter((m) => {
       if (m.newValue === 'span') return false; // Allow any → span (transient)
       if (m.newValue === 'br') return false;   // Allow any → br (editor emptied)
+      if (m.newValue === 'blockquote') return false; // Allow any → blockquote
+      if (m.newValue === 'table') return false; // Allow any → table
+      if (m.newValue === 'pre') return false; // Allow pre (inside code block)
+      if (m.newValue === 'code') return false; // Allow code element
+      if (m.newValue === 'thead' || m.newValue === 'tbody' || m.newValue === 'tr' || m.newValue === 'th' || m.newValue === 'td') return false; // table internals
+      if (m.oldValue === 'blockquote') return false; // Allow blockquote → any
       const allowed = valid[m.oldValue] || [];
       return allowed.indexOf(m.newValue) === -1;
     })
