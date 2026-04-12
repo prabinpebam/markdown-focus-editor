@@ -80,14 +80,15 @@ const markdownConverter = {
             }
 
             // ── Blockquote handling ──
-            const quoteMatch = line.match(/^(>{1,5})\s(.*)$/);
+            // Match: "> text", ">text", ">" (bare), and "   > text" (indented)
+            const quoteMatch = line.match(/^\s*(>{1,5})\s?(.*)$/);
             if (quoteMatch) {
                 if (inList) {
                     processedLines.push(this._constructList(listItems, listType));
                     inList = false; listItems = [];
                 }
                 if (!inBlockquote) inBlockquote = true;
-                blockquoteLines.push({ depth: quoteMatch[1].length, text: quoteMatch[2] });
+                blockquoteLines.push({ depth: quoteMatch[1].length, text: quoteMatch[2] || '' });
                 continue;
             }
 
@@ -664,7 +665,7 @@ const markdownConverter = {
             /^#+\s+/m,                     // Headers
             /\*\*.*\*\*/,                  // Bold
             /\*.*\*/,                      // Italic
-            /^>\s+/m,                      // Blockquotes
+            /^\s*>\s?/m,                   // Blockquotes (including bare > and indented >)
             /^-\s+/m,                      // Unordered lists
             /^[0-9]+\.\s+/m,               // Ordered lists
             /\[.*\]\(.*\)/,                // Links
@@ -672,7 +673,8 @@ const markdownConverter = {
             /^```[\s\S]*?```/m,            // Code blocks
             /`.*`/,                        // Inline code
             /^---+$/m,                     // Horizontal rules
-            /~~.*~~/                       // Strikethrough
+            /~~.*~~/,                      // Strikethrough
+            /^\|.+\|\s*$/m,               // Tables (pipe-separated rows)
         ];
         
         // Return true if any pattern matches
