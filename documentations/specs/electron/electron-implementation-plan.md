@@ -1,29 +1,55 @@
 # Electron App — Implementation Plan
 
-> **Methodology**: Strict TDD with eval-loop verification  
-> **Architecture**: Gated phases, each verified before proceeding  
-> **Testing**: Playwright Electron + DOM snapshots → heuristic + semantic eval → fix loop  
-> **Version**: 1.0 | April 2026
+> **Methodology**: Implement → Capture (agnostic observation) → Evaluate → Fix  
+> **Architecture**: Gated phases, each observed and evaluated before proceeding  
+> **Observation**: Agnostic DOM + filesystem state capture — no assertions during recording  
+> **Evaluation**: Heuristic + semantic analysis applied AFTER capture  
+> **Version**: 2.0 | April 2026
 
 ---
 
 ## Implementation Philosophy
 
-```
-For every feature:
-  1. Write the eval-loop test FIRST (from the spec scenario)
-  2. Run it → FAIL (feature doesn't exist yet)
-  3. Implement the feature
-  4. Run eval loop → analyze anomalies
-  5. Fix anomalies → re-run
-  6. Converge to CLEAN (zero critical, zero warning)
-  7. Gate review → proceed to next feature
+Implementation and evaluation are two separate activities. They must not be confused.
 
-The web editor core is shared. Electron wraps it with:
-  - Node.js filesystem access (main process)
-  - Custom frameless window (BrowserWindow)
-  - IPC for file operations (main ↔ renderer)
-  - Native file dialogs (dialog.showOpenDialog, etc.)
+### Step 1: Implement the Feature
+Build the feature. The web editor core is shared. Electron wraps it with:
+- Node.js filesystem access (main process)
+- Custom frameless window (BrowserWindow)
+- IPC for file operations (main ↔ renderer)
+- Native file dialogs (dialog.showOpenDialog, etc.)
+
+### Step 2: Prepare Agnostic Capture
+For each feature, prepare a capture scenario that:
+- Simulates the user's taskflow (from spec scenarios)
+- Records DOM state snapshots (visual layer) across time
+- Records filesystem state (file exists, content, size, modification time)
+- Records window state (title bar text, size, position)
+- Captures mutations between frames and screenshots
+
+**The capture imposes NO expectations.** It observes what the system actually does — the DOM, the file on disk, the title bar, the notification bar. Pure observation.
+
+### Step 3: Run the Capture
+Execute against the real Electron app via Playwright's `_electron.launch()`. Mock nothing. Record everything.
+
+### Step 4: Evaluate (Separately, After Recording)
+Apply evaluation criteria from USER EXPECTATIONS:
+- **Heuristic**: Does the title bar show the correct filename? Is the file on disk up to date?
+- **Temporal**: Did the unsaved dot appear before auto-save and disappear after?
+- **Semantic**: Would a user know that their file was saved? Would they be confused by the title bar?
+
+### Step 5: Identify Gaps → Fix → Re-Capture → Re-Evaluate
+
+```
+For every gate:
+  1. IMPLEMENT the feature
+  2. PREPARE agnostic capture scenarios (from spec taskflows)
+  3. CAPTURE — run against real Electron app, record timeline
+  4. EVALUATE — apply heuristic + temporal + semantic checks
+  5. IDENTIFY GAPS — actual vs expected user behavior
+  6. FIX gaps → re-capture → re-evaluate
+  7. CONVERGE — zero critical, zero warning gaps
+  8. Gate review → proceed to next feature
 ```
 
 ---
@@ -93,10 +119,10 @@ G0-4: Shared test infrastructure
   Eval-loop tests can run against both web (HTTP) and Electron
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-SETUP-01  "Electron app launches"
+Capture: E-SETUP-01  "Electron app launches"
   Actions:
     1. Launch Electron app via Playwright
     2. Wait for window to appear
@@ -106,7 +132,7 @@ Test ID: E-SETUP-01  "Electron app launches"
     - #editor element exists and is contenteditable
     - No JavaScript errors in console
 
-Test ID: E-SETUP-02  "Shared editor core works in Electron"
+Capture: E-SETUP-02  "Shared editor core works in Electron"
   Actions:
     1. Launch Electron app
     2. Type "# Heading" → Enter → "**bold text"
@@ -201,10 +227,10 @@ G1-5: Double-click maximize toggle
   Title bar double-click → toggle maximize/restore
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-TB-01  "Title bar renders correctly"
+Capture: E-TB-01  "Title bar renders correctly"
   Actions: Launch app, capture DOM
   Heuristic:
     - #title-bar element exists
@@ -212,14 +238,14 @@ Test ID: E-TB-01  "Title bar renders correctly"
     - 3 window control buttons exist
     - All buttons have aria-labels
 
-Test ID: E-TB-02  "Window controls work"
+Capture: E-TB-02  "Window controls work"
   Actions:
     1. Click minimize → verify window minimized
     2. Click maximize → verify window maximized
     3. Click restore → verify window normal
     4. Click close → verify app quits (auto-save first)
 
-Test ID: E-TB-03  "Title bar matches theme"
+Capture: E-TB-03  "Title bar matches theme"
   Actions:
     1. Capture title bar style (light theme)
     2. Toggle theme to dark
@@ -228,7 +254,7 @@ Test ID: E-TB-03  "Title bar matches theme"
     - Background color changes with theme
     - Text color changes with theme
 
-Test ID: E-TB-04  "Close button hover shows red"
+Capture: E-TB-04  "Close button hover shows red"
   Actions: Hover over close button, capture computed background-color
   Heuristic: background-color is red variant on hover
 ```
@@ -284,10 +310,10 @@ G2-5: Command-line file argument
   process.argv[1] → if it's a file path → open on launch
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-OPEN-01  "Open file via Ctrl+O"
+Capture: E-OPEN-01  "Open file via Ctrl+O"
   Actions:
     1. Create a temp .md file with known content
     2. Launch app
@@ -297,19 +323,19 @@ Test ID: E-OPEN-01  "Open file via Ctrl+O"
     - Editor content matches file
     - Title bar shows filename + folder
 
-Test ID: E-OPEN-02  "Open file via drag-and-drop"
+Capture: E-OPEN-02  "Open file via drag-and-drop"
   Actions: Drag temp .md file onto window, capture
   Heuristic: Same as E-OPEN-01
 
-Test ID: E-OPEN-03  "Open file via command line"
+Capture: E-OPEN-03  "Open file via command line"
   Actions: Launch with file argument, capture
   Heuristic: File content loaded, title bar correct
 
-Test ID: E-OPEN-04  "Open nonexistent file from CLI"
+Capture: E-OPEN-04  "Open nonexistent file from CLI"
   Actions: Launch with --file /nonexistent/path.md
   Heuristic: Empty editor, title bar shows "path.md (new)"
 
-Test ID: E-OPEN-05  "Open read-only file"
+Capture: E-OPEN-05  "Open read-only file"
   Actions: Open file with read-only permissions
   Heuristic: Content loads, notification "read-only" shown
 ```
@@ -362,10 +388,10 @@ G3-5: Unsaved dot indicator
   Disappears after successful save
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-SAVE-01  "Auto-save writes to disk after 500ms"
+Capture: E-SAVE-01  "Auto-save writes to disk after 500ms"
   Actions:
     1. Open temp file
     2. Type text
@@ -373,26 +399,26 @@ Test ID: E-SAVE-01  "Auto-save writes to disk after 500ms"
     4. Read file from disk
   Heuristic: File content matches editor content
 
-Test ID: E-SAVE-02  "Ctrl+S saves immediately"
+Capture: E-SAVE-02  "Ctrl+S saves immediately"
   Actions: Open file, type text, Ctrl+S immediately, read disk
   Heuristic: File updated without 500ms waiting
 
-Test ID: E-SAVE-03  "Unsaved dot appears and disappears"
+Capture: E-SAVE-03  "Unsaved dot appears and disappears"
   Actions:
     1. Open file
     2. Type text → check title bar for ●
     3. Wait for auto-save → check ● disappeared
   Heuristic: ● present after edit, absent after save
 
-Test ID: E-SAVE-04  "Save on close"
+Capture: E-SAVE-04  "Save on close"
   Actions: Open file, type text, close window, re-open, read file
   Heuristic: File contains the text typed before close
 
-Test ID: E-SAVE-05  "Atomic write (no partial files)"
+Capture: E-SAVE-05  "Atomic write (no partial files)"
   Actions: Open file, type large content, save during write
   Heuristic: File is either old version or new version, never partial
 
-Test ID: E-SAVE-06  "Content is clean markdown (no HTML artifacts)"
+Capture: E-SAVE-06  "Content is clean markdown (no HTML artifacts)"
   Actions: Type heading + bold + list, save, read file
   Heuristic: File contains # Heading, **bold**, - item (no <span>, no ZWSP)
 ```
@@ -425,18 +451,18 @@ G4-3: First save of untitled file
   Ctrl+S on untitled → triggers Save As dialog
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-NEW-01  "Ctrl+N creates new untitled document"
+Capture: E-NEW-01  "Ctrl+N creates new untitled document"
   Actions: Open file, type text, Ctrl+N
   Heuristic: Editor empty, title bar "Untitled", old file saved on disk
 
-Test ID: E-NEW-02  "Save As creates new file"
+Capture: E-NEW-02  "Save As creates new file"
   Actions: Open file, Ctrl+Shift+S → pick new path
   Heuristic: New file exists, title bar updated, original preserved
 
-Test ID: E-NEW-03  "Untitled Ctrl+S triggers Save As"
+Capture: E-NEW-03  "Untitled Ctrl+S triggers Save As"
   Actions: Ctrl+N, type text, Ctrl+S → Save As dialog
   Heuristic: File created at chosen path, title bar updated
 ```
@@ -500,10 +526,10 @@ G6-4: Debounce watcher events
   Multiple rapid events (editors save in stages) → 500ms debounce
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-WATCH-01  "External modification detected"
+Capture: E-WATCH-01  "External modification detected"
   Actions:
     1. Open file in app
     2. Write to the file from test (bypassing app)
@@ -513,15 +539,15 @@ Test ID: E-WATCH-01  "External modification detected"
     - Notification bar element exists in DOM
     - reload and Ignore buttons present
 
-Test ID: E-WATCH-02  "Reload replaces editor content"
+Capture: E-WATCH-02  "Reload replaces editor content"
   Actions: External modification → click Reload
   Heuristic: Editor content matches new file content
 
-Test ID: E-WATCH-03  "Ignore keeps editor content"
+Capture: E-WATCH-03  "Ignore keeps editor content"
   Actions: External modification → click Ignore
   Heuristic: Editor content unchanged (in-memory version)
 
-Test ID: E-WATCH-04  "File deleted externally"
+Capture: E-WATCH-04  "File deleted externally"
   Actions: Delete file from disk while app has it open
   Heuristic: Title bar shows "(deleted)"
 ```
@@ -556,13 +582,13 @@ G7-4: Settings corruption recovery
   JSON parse error → apply defaults, backup old file
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: E-ERR-01  "Save fails — notification shown"
-Test ID: E-ERR-02  "Read-only file — notification + Save As works"
-Test ID: E-ERR-03  "Disk full — editor keeps working"
-Test ID: E-ERR-04  "Settings corrupted — defaults applied"
+Capture: E-ERR-01  "Save fails — notification shown"
+Capture: E-ERR-02  "Read-only file — notification + Save As works"
+Capture: E-ERR-03  "Disk full — editor keeps working"
+Capture: E-ERR-04  "Settings corrupted — defaults applied"
 ```
 
 ### Gate 7 Exit Criteria
@@ -779,16 +805,27 @@ async function launchApp(fileArg) {
 | File watcher running for current file | `WATCHER_NOT_RUNNING` | warning |
 | Notification bar visible on external change | `EXTERNAL_CHANGE_UNNOTIFIED` | critical |
 
-### Fix Loop Protocol (Same as Web)
+### Fix Loop Protocol
 
 ```
 For each gate:
-  1. Write eval-loop tests from spec scenarios
-  2. Run → capture snapshots + anomaly reports
-  3. Analyze: critical (must fix), warning (should fix), info (accept)
-  4. Fix → re-run → repeat until CLEAN
-  5. Regression check: run all existing tests
-  6. Gate review → sign off → next gate
+  1. Implement the feature (from spec)
+  2. Prepare capture scenarios (from spec taskflows)
+     - Playwright Electron actions simulate user behavior
+     - Capture records DOM + filesystem + window state — agnostic, no assertions
+  3. Run capture → record timeline + mutations + screenshots
+  4. Evaluate the recording (AFTER capture, separately):
+     - Heuristic: boolean invariant checks from user expectations
+     - Temporal: rules over the mutation timeline
+     - Semantic: open-ended user-perspective questions
+  5. Identify gaps: anomalies = divergence from expected user behavior
+     - Critical: must fix before proceeding
+     - Warning: should fix, may accept with justification
+     - Info: document and accept
+  6. Fix the app (not the eval) → re-capture → re-evaluate
+  7. Converge: zero critical, zero warning
+  8. Run regression (all existing captures) → must stay clean
+  9. Gate review → sign off
 ```
 
 ---

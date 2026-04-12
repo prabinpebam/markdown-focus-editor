@@ -1,25 +1,57 @@
 # Web App — Implementation Plan
 
-> **Methodology**: Strict TDD with eval-loop verification  
-> **Architecture**: Gated phases, each verified before proceeding  
-> **Testing**: DOM snapshot capture → heuristic + semantic evaluation → fix loop  
-> **Version**: 1.0 | April 2026
+> **Methodology**: Implement → Capture (agnostic observation) → Evaluate → Fix  
+> **Architecture**: Gated phases, each observed and evaluated before proceeding  
+> **Observation**: Agnostic DOM state capture across time — no assertions during recording  
+> **Evaluation**: Heuristic + semantic analysis applied AFTER capture  
+> **Version**: 2.0 | April 2026
 
 ---
 
 ## Implementation Philosophy
 
-```
-For every feature:
-  1. Write the eval-loop test FIRST (from the spec scenario)
-  2. Run it → FAIL (feature doesn't exist yet)
-  3. Implement the feature
-  4. Run eval loop → analyze anomalies
-  5. Fix anomalies → re-run
-  6. Converge to CLEAN (zero critical, zero warning)
-  7. Gate review → proceed to next feature
+Implementation and evaluation are two separate activities. They must not be confused.
 
-No feature ships without a CLEAN eval-loop run.
+### Step 1: Implement the Feature
+Build the feature according to the spec. Write the code. Ship it into the running app.
+
+### Step 2: Prepare Agnostic DOM Capture
+For each feature, prepare a capture scenario that:
+- Simulates the user's taskflow (from the spec scenarios)
+- Records DOM state snapshots across time
+- Captures the visual layer, store layer, and inline anomalies
+- Records mutations between frames
+- Takes screenshots at key moments
+
+**The capture imposes NO expectations.** It observes what the system actually does — agnostic of technology, implementation, or desired behavior. The capture function is a camera, not a judge.
+
+### Step 3: Run the Capture
+Execute the scenario against the real running app in a real browser. Mock nothing. The recording is a structured timeline of what the user would see at each moment.
+
+### Step 4: Evaluate (Separately, After Recording)
+Apply evaluation criteria AFTER the recording exists:
+- **Heuristic checks**: Boolean invariants from user expectations (e.g., "every heading has a marker")
+- **Temporal rules**: State evolution rules over the mutation timeline (e.g., "states don't go backwards")
+- **Semantic evaluation**: Open-ended questions (e.g., "would the user be confused?")
+
+Evaluation criteria come from USER EXPECTATIONS (spec scenarios), not from code.
+
+### Step 5: Identify Gaps
+Anomalies are observations that diverge from what a user would expect. They are not "test failures" — they are gaps between actual and expected behavior.
+
+### Step 6: Fix → Re-Capture → Re-Evaluate
+Fix the app (not the eval). Re-run the capture. Re-evaluate. Repeat until the gap between actual and expected is closed.
+
+```
+For every gate:
+  1. IMPLEMENT the feature
+  2. PREPARE agnostic capture scenarios (from spec taskflows)
+  3. CAPTURE — run against real app, record timeline
+  4. EVALUATE — apply heuristic + temporal + semantic checks
+  5. IDENTIFY GAPS — actual vs expected user behavior
+  6. FIX gaps → re-capture → re-evaluate
+  7. CONVERGE — zero critical, zero warning gaps
+  8. Gate review → proceed to next feature
 ```
 
 ---
@@ -101,10 +133,10 @@ G3-3: Download notification
   - role="alert" for screen readers
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: DL-01  "Download produces valid markdown"
+Capture: DL-01  "Download produces valid markdown"
   Actions:
     1. Type "# Heading" + Enter + "**bold** text" + Enter + "- list"
     2. Trigger Ctrl+S
@@ -118,11 +150,11 @@ Test ID: DL-01  "Download produces valid markdown"
     - No <span class="heading-marker">
     - Valid UTF-8
 
-Test ID: DL-02  "Download filename matches document name"
+Capture: DL-02  "Download filename matches document name"
   Actions: Create doc named "My Notes", Ctrl+S
   Check: downloaded filename == "My Notes.md"
 
-Test ID: DL-03  "Download works with special characters in name"
+Capture: DL-03  "Download works with special characters in name"
   Actions: Create doc named "2026/04 — Draft #1", Ctrl+S
   Check: filename sanitized for OS (no / or special chars)
 ```
@@ -154,18 +186,18 @@ G4-2: Large file import guard (SC-W39)
   - Alert with explanation if too large
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: IM-01  "Import malformed JSON — no crash"
+Capture: IM-01  "Import malformed JSON — no crash"
   Actions: Trigger import with "{not valid json"
   Check: Alert shown, no documents modified, app functional
 
-Test ID: IM-02  "Import wrong schema — no crash"
+Capture: IM-02  "Import wrong schema — no crash"
   Actions: Trigger import with '{"users": [1,2,3]}'
   Check: Alert shown, no documents modified
 
-Test ID: IM-03  "Import partial corruption"
+Capture: IM-03  "Import partial corruption"
   Actions: Import JSON with 3 valid + 1 malformed doc
   Check: 3 imported, 1 skipped, notification shows counts
 ```
@@ -203,10 +235,10 @@ G5-4: Graceful handling of missing localStorage (SC-W02)
   - If unavailable: editor works, notification shown, no persistence
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: ERR-01  "Storage full — editor keeps working"
+Capture: ERR-01  "Storage full — editor keeps working"
   Actions:
     1. Fill localStorage to near 5MB
     2. Type text → auto-save triggers
@@ -216,7 +248,7 @@ Test ID: ERR-01  "Storage full — editor keeps working"
     - Content in DOM matches what user typed
     - blockCount > 0
 
-Test ID: ERR-02  "Corrupted localStorage — recovers"
+Capture: ERR-02  "Corrupted localStorage — recovers"
   Actions:
     1. Inject corrupted JSON into localStorage key
     2. Reload page
@@ -225,7 +257,7 @@ Test ID: ERR-02  "Corrupted localStorage — recovers"
     - blockCount >= 1 (default doc exists)
     - No JavaScript errors in console
 
-Test ID: ERR-03  "localStorage unavailable — notification shown"
+Capture: ERR-03  "localStorage unavailable — notification shown"
   Actions:
     1. Block localStorage access (Object.defineProperty override)
     2. Load app
@@ -284,10 +316,10 @@ G6-5: High contrast
   - Borders, focus rings, text all meet WCAG AA contrast ratios
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: A11Y-01  "Modal keyboard navigation"
+Capture: A11Y-01  "Modal keyboard navigation"
   Actions:
     1. Ctrl+O → modal opens
     2. Tab → first thumbnail focused (check focus ring)
@@ -299,7 +331,7 @@ Test ID: A11Y-01  "Modal keyboard navigation"
     - focusedElement matches expected thumbnail
     - Modal has role="dialog" and aria-modal="true"
 
-Test ID: A11Y-02  "ARIA attributes present"
+Capture: A11Y-02  "ARIA attributes present"
   Actions: Open modal, capture DOM
   Heuristic:
     - Modal element has role, aria-modal, aria-labelledby
@@ -307,7 +339,7 @@ Test ID: A11Y-02  "ARIA attributes present"
     - Delete buttons have aria-label
     - Close button has aria-label
 
-Test ID: A11Y-03  "Focus returns to editor after modal"
+Capture: A11Y-03  "Focus returns to editor after modal"
   Actions: Ctrl+O → Escape → check focused element
   Heuristic: document.activeElement === editorEl
 ```
@@ -342,10 +374,10 @@ G7-2: Pre-import quota check (SC-W39)
   - "Not enough storage space for this import."
 ```
 
-### TDD: Eval-Loop Tests
+### Agnostic Capture Scenarios
 
 ```
-Test ID: SQ-01  "Storage bar shows correct percentage"
+Capture: SQ-01  "Storage bar shows correct percentage"
   Actions:
     1. Create 3 documents with known content sizes
     2. Open modal
@@ -355,7 +387,7 @@ Test ID: SQ-01  "Storage bar shows correct percentage"
     - storagePercent < 100
     - Displayed text matches calculated usage
 
-Test ID: SQ-02  "Storage >80% shows amber bar"
+Capture: SQ-02  "Storage >80% shows amber bar"
   Actions:
     1. Fill localStorage to ~4.2MB
     2. Open modal
@@ -363,7 +395,7 @@ Test ID: SQ-02  "Storage >80% shows amber bar"
   Heuristic:
     - Progress bar background-color is amber/warning color
 
-Test ID: SQ-03  "Import blocked when storage would exceed"
+Capture: SQ-03  "Import blocked when storage would exceed"
   Actions:
     1. Fill localStorage to ~4.8MB
     2. Try to import a 500KB .md file
@@ -486,16 +518,23 @@ Each gate's tests capture the standard snapshot plus gate-specific fields:
 
 ```
 For each gate:
-  1. Write eval-loop tests based on spec scenarios
-  2. Run tests → capture snapshots + anomaly reports
-  3. Analyze anomalies:
+  1. Implement the feature (from spec)
+  2. Prepare capture scenarios (from spec taskflows)
+     - Playwright actions simulate user behavior
+     - CAPTURE_FN records DOM state — agnostic, no assertions
+  3. Run capture → record timeline + mutations + screenshots
+  4. Evaluate the recording (AFTER capture, separately):
+     - Heuristic: boolean invariant checks from user expectations
+     - Temporal: rules over the mutation timeline
+     - Semantic: open-ended user-perspective questions
+  5. Identify gaps: anomalies = divergence from expected user behavior
      - Critical: must fix before proceeding
      - Warning: should fix, may accept with justification
      - Info: document and accept
-  4. Fix code → re-run tests
-  5. Repeat until CLEAN
-  6. Run regression (all existing tests) → must stay CLEAN
-  7. Gate review → sign off
+  6. Fix the app (not the eval) → re-capture → re-evaluate
+  7. Converge: zero critical, zero warning
+  8. Run regression (all existing captures) → must stay clean
+  9. Gate review → sign off
 ```
 
 ---
