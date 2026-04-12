@@ -80,6 +80,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 100);
     
     console.log('[App] Initialization complete');
+
+    // ── Scroll detection: show scrollbar only while actively scrolling ──
+    let scrollTimer = null;
+    window.addEventListener('scroll', () => {
+        document.body.classList.add('is-scrolling');
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(() => {
+            document.body.classList.remove('is-scrolling');
+        }, 800);
+    }, { passive: true });
 });
 
 // Consolidated keyboard shortcuts
