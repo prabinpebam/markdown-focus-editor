@@ -31,6 +31,7 @@ function checkBlockTypeTransitions(mutations) {
       if (m.newValue === 'hr') return false; // Allow horizontal rule
       if (m.newValue === 'a') return false; // Allow anchor element
       if (m.newValue === 'input') return false; // Allow checkbox (task list)
+      if (m.newValue === 'img') return false; // Allow image element
       if (m.newValue === 'thead' || m.newValue === 'tbody' || m.newValue === 'tr' || m.newValue === 'th' || m.newValue === 'td') return false; // table internals
       if (m.oldValue === 'blockquote') return false; // Allow blockquote → any
       const allowed = valid[m.oldValue] || [];

@@ -1924,6 +1924,20 @@ blockquote div:first-child {
     accent-color: rgba(255, 255, 255, 0.6);
 }
 
+/* ── Images ── */
+#editor img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 0.5em 0;
+    display: block;
+    opacity: 0.9;
+}
+
+#editor img:hover {
+    opacity: 1;
+}
+
 /* ── Minimal Auto-Hide Scrollbar ── */
 
 /* Hide scrollbar completely by default */

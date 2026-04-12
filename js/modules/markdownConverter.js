@@ -110,7 +110,7 @@ const markdownConverter = {
                 }
                 
                 const level = headingMatch[1].length;
-                const text = headingMatch[2];
+                const text = this._processInlineMarkdown(headingMatch[2]);
                 processedLines.push(`<h${level}><span class="heading-marker" contenteditable="false">${headingMatch[1]}</span>\u200B${text}</h${level}>`);
                 continue;
             }
@@ -274,16 +274,30 @@ const markdownConverter = {
     _processInlineMarkdown(line) {
         if (!line) return '';
         let result = line;
+        // Character escapes: \* \[ \\ etc. — replace with placeholder, restore after
+        const escapes = [];
+        result = result.replace(/\\([\\`*_{}\[\]()#+\-.!~>|])/g, (match, char) => {
+            escapes.push(char);
+            return `\x00ESC${escapes.length - 1}\x00`;
+        });
         // Inline code (must come first — content inside backticks should not be processed)
         result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Images ![alt](url)
+        result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" title="$1" contenteditable="false">');
         // Links [text](url)
         result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" title="$2" contenteditable="false">$1</a>');
-        // Bold
+        // Bold (asterisks and underscores)
         result = result.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-        // Italic
+        result = result.replace(/__([^_]+)__/g, '<b>$1</b>');
+        // Italic (asterisks and underscores)
         result = result.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+        result = result.replace(/\b_([^_]+)_\b/g, '<i>$1</i>');
         // Strikethrough
         result = result.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+        // Autolinks: bare URLs
+        result = result.replace(/(^|[\s(])(https?:\/\/[^\s<>"')\]]+)/g, '$1<a href="$2" title="$2" contenteditable="false">$2</a>');
+        // Restore escaped characters
+        result = result.replace(/\x00ESC(\d+)\x00/g, (match, idx) => escapes[parseInt(idx)]);
         return result;
     },
     
@@ -725,8 +739,10 @@ const markdownConverter = {
         // Test for common Markdown patterns
         const markdownPatterns = [
             /^#+\s+/m,                     // Headers
-            /\*\*.*\*\*/,                  // Bold
-            /\*.*\*/,                      // Italic
+            /\*\*.*\*\*/,                  // Bold (asterisks)
+            /__.*__/,                      // Bold (underscores)
+            /\*.*\*/,                      // Italic (asterisks)
+            /\b_[^_]+_\b/,                // Italic (underscores)
             /^\s*>\s?/m,                   // Blockquotes (including bare > and indented >)
             /^-\s+/m,                      // Unordered lists
             /^[0-9]+\.\s+/m,               // Ordered lists
@@ -737,6 +753,8 @@ const markdownConverter = {
             /^---+$/m,                     // Horizontal rules
             /~~.*~~/,                      // Strikethrough
             /^\|.+\|\s*$/m,               // Tables (pipe-separated rows)
+            /https?:\/\/\S+/,              // Autolinks (bare URLs)
+            /\\[\\`*_{}\[\]()#+\-.!~>|]/,  // Character escapes
         ];
         
         // Return true if any pattern matches
@@ -768,12 +786,16 @@ const markdownConverter = {
         if (!hasBlockElements) {
             // Check if there's at least one inline pattern
             const inlinePatterns = [
-                /\*\*.*\*\*/,          // Bold
-                /\*.*\*/,              // Italic
+                /\*\*.*\*\*/,          // Bold (asterisks)
+                /__.*__/,              // Bold (underscores)
+                /\*.*\*/,              // Italic (asterisks)
+                /\b_.*_\b/,            // Italic (underscores)
                 /~~.*~~/,              // Strikethrough
                 /`.*`/,                // Inline code
                 /\[.*\]\(.*\)/,        // Links
-                /!\[.*\]\(.*\)/        // Images
+                /!\[.*\]\(.*\)/,       // Images
+                /https?:\/\/\S+/,      // Autolinks
+                /\\[\\`*_{}\[\]()#+\-.!~>|]/, // Escaped characters
             ];
             
             return inlinePatterns.some(pattern => pattern.test(content));
@@ -788,41 +810,12 @@ const markdownConverter = {
      * @returns {string} Processed HTML for inline content
      */
     _processInlineOnlyMarkdown(markdown) {
-        // Check for exact pattern matches first
-        const italicMatch = markdown.match(/^\*([^*]+)\*$/);
-        const boldMatch = markdown.match(/^\*\*([^*]+)\*\*$/);
-        const strikeMatch = markdown.match(/^~~([^~]+)~~$/);
-        
-        // Handle exact matches with clean tags
-        if (italicMatch) {
-            return `<i>${italicMatch[1]}</i>`;
-        } else if (boldMatch) {
-            return `<b>${boldMatch[1]}</b>`;
-        } else if (strikeMatch) {
-            return `<s>${strikeMatch[1]}</s>`;
-        }
-        
-        // Process other inline styles
-        let processedContent = markdown;
-        
-        // Inline code (first — content inside backticks not processed further)
-        processedContent = processedContent.replace(/`([^`]+)`/g, '<code>$1</code>');
-        
-        // Links [text](url)
-        processedContent = processedContent.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" title="$2" contenteditable="false">$1</a>');
-        
-        // Bold
-        processedContent = processedContent.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-        
-        // Italic
-        processedContent = processedContent.replace(/\*([^*]+)\*/g, '<i>$1</i>');
-        
-        // Strikethrough
-        processedContent = processedContent.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+        // Use the shared inline processor
+        let processedContent = this._processInlineMarkdown(markdown);
         
         // Add zero-width space after the last inline element if there isn't one
         if (!/\u200B$/.test(processedContent)) {
-            processedContent = processedContent.replace(/<\/(b|i|s)>(?![\s\S]*<\/(b|i|s)>)/g, '$&\u200B');
+            processedContent = processedContent.replace(/<\/(b|i|s|code|a)>(?![\s\S]*<\/(b|i|s|code|a)>)/g, '$&\u200B');
         }
         
         // Only wrap in a div if not already wrapped in an HTML tag

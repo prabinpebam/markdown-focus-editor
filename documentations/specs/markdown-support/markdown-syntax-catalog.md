@@ -128,19 +128,19 @@
 | # | Syntax | Input Trigger | Keyboard | Paste | Export | Status |
 |---|--------|---------------|----------|-------|--------|--------|
 | 2.1.1 | `*text*` (asterisk) | Type `*text*` char-by-char | Ctrl+I | ✅ | ✅ | ✅ INPUT |
-| 2.1.2 | `_text_` (underscore) | — | — | ❌ | ❌ | ❌ |
+| 2.1.2 | `_text_` (underscore) | Type `_text_` char-by-char | — | ✅ | ✅ | ✅ INPUT |
 | 2.1.3 | Intraword emphasis `foo*bar*baz` | — | — | ❌ | ❌ | ❌ |
 
-**Implementation**: `inlineStyleManager.js` — regex `/(\*)([^\s*])/` triggers on char after closing `*`. Produces `<i>`.
+**Implementation**: `inlineStyleManager.js` — patterns for both `*` and `_`. Underscore regex `/(_)([^\s_])/`. Paste handles both via `_processInlineMarkdown`.
 
 ### 2.2 Strong (Bold)
 
 | # | Syntax | Input Trigger | Keyboard | Paste | Export | Status |
 |---|--------|---------------|----------|-------|--------|--------|
 | 2.2.1 | `**text**` (asterisk) | Type `**text**` char-by-char | Ctrl+B | ✅ | ✅ | ✅ INPUT |
-| 2.2.2 | `__text__` (underscore) | — | — | ❌ | ❌ | ❌ |
+| 2.2.2 | `__text__` (underscore) | Type `__text__` char-by-char | — | ✅ | ✅ | ✅ INPUT |
 
-**Implementation**: `inlineStyleManager.js` — regex `/(\*\*)([^\s*])/` triggers on char after closing `**`. Produces `<b>`.
+**Implementation**: `inlineStyleManager.js` — patterns for both `**` and `__`. Underscore regex `/(__)([^\s_])/`. Paste handles both via `_processInlineMarkdown`.
 
 ### 2.3 Bold + Italic
 
@@ -176,7 +176,7 @@
 | 2.6.2 | `[text](url "title")` with title | — | ❌ | ❌ | ❌ |
 | 2.6.3 | `[text][ref]` reference-style | — | ❌ | ❌ | ❌ |
 | 2.6.4 | `<url>` autolink | — | ❌ | ❌ | ❌ |
-| 2.6.5 | `https://...` extended autolink (GFM) | — | ❌ | ❌ | ❌ |
+| 2.6.5 | `https://...` extended autolink (GFM) | Type URL + space | ✅ | ✅ | ✅ INPUT |
 | 2.6.6 | `user@email.com` email autolink (GFM) | — | ❌ | ❌ | ❌ |
 
 **Implementation**: `inlineStyleManager.js` — detects closing `)` with lookback for `[text](url)` pattern. Creates `<a>` with `contenteditable="false"` and ZWSP after. Paste via `_processInlineMarkdown()`. Export via `_processEditorInlineContent()` `case 'a'` → `[text](url)`.
@@ -185,18 +185,22 @@
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 2.7.1 | `![alt](src)` inline | — | ❌ | ✅ | 🔶 EXPORT ONLY |
+| 2.7.1 | `![alt](src)` inline | Type `![alt](url)` char-by-char | ✅ | ✅ | ✅ INPUT |
 | 2.7.2 | `![alt](src "title")` with title | — | ❌ | ❌ | ❌ |
 | 2.7.3 | `![alt][ref]` reference-style | — | ❌ | ❌ | ❌ |
+
+**Implementation**: `inlineStyleManager.js` — detects closing `)` preceded by `![alt](url)` pattern. Creates `<img>` with `contenteditable="false"` and ZWSP after. Paste via `_processInlineMarkdown`. Export via `_processEditorInlineContent` `case 'img'`. CSS: max-width 100%, rounded, slight opacity.
 
 ### 2.8 Character Escapes
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 2.8.1 | `\*` escaped asterisk | — | ❌ | ❌ | ❌ |
-| 2.8.2 | `\[` escaped bracket | — | ❌ | ❌ | ❌ |
-| 2.8.3 | `\\` escaped backslash | — | ❌ | ❌ | ❌ |
-| 2.8.4 | All 32 CommonMark escapable characters | — | ❌ | ❌ | ❌ |
+| 2.8.1 | `\*` escaped asterisk | — | ✅ | ✅ | ✅ PASTE |
+| 2.8.2 | `\[` escaped bracket | — | 🔶 | ❌ | 🔶 PARTIAL |
+| 2.8.3 | `\\` escaped backslash | — | ✅ | ✅ | ✅ PASTE |
+| 2.8.4 | All 32 CommonMark escapable characters | — | ✅ | ✅ | ✅ PASTE |
+
+**Implementation**: `_processInlineMarkdown` — escape handler replaces `\` + special char with placeholder before inline processing, then restores literal character. Prevents false triggers on `\*`, `\~`, etc.
 
 ### 2.9 HTML Entities
 
@@ -278,9 +282,9 @@
 | Category | Total | ✅ Supported | 🔶 Partial | ❌ Unsupported |
 |----------|-------|-------------|-----------|----------------|
 | Block Elements | 36 | 25 | 0 | 11 |
-| Inline Elements | 24 | 6 | 1 | 17 |
+| Inline Elements | 24 | 12 | 1 | 11 |
 | Extended (GFM+) | 14 | 2 | 0 | 12 |
-| **TOTAL** | **74** | **33** | **1** | **40** |
+| **TOTAL** | **74** | **39** | **1** | **34** |
 
 ### Recently Implemented (this session)
 
@@ -294,12 +298,15 @@
 | Inline Code | Input + Paste + Export | `inlineStyleManager.js` | IC-01..04 |
 | Task Lists | Input + Paste + Export | `listManager.js` | TASK-01..03 |
 | Links | Input + Paste + Export | `inlineStyleManager.js` | LINK-01..03 |
+| Underscore Emphasis | Input + Paste + Export | `inlineStyleManager.js` | USCORE-01..03 |
+| Images | Input + Paste + Export | `inlineStyleManager.js` | IMG-01..03 |
+| Autolinks | Input + Paste | `inlineStyleManager.js` | AUTO-01..03 |
+| Character Escapes | Paste + Export | `markdownConverter.js` | ESC-01..02 |
 
 ### Priority Features for Next Implementation
 
 | Priority | Feature | Complexity | Impact |
 |----------|---------|------------|--------|
-| **P2** | Images `![alt](src)` input trigger | Medium | Low |
 | **P2** | Link titles `[text](url "title")` | Low | Low |
-| **P3** | Character Escapes (`\*`) | Low | Low |
-| **P3** | Autolinks (`<url>`) | Low | Low |
+| **P3** | `<url>` autolink | Low | Low |
+| **P3** | Email autolink | Low | Low |

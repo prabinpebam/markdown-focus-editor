@@ -4,8 +4,11 @@ const inlineStyleManager = {
     patterns: [
         // Order is important: bolditalic must be checked before bold or italic
         { name: 'bolditalic', regex: /(\*\*\*)([^\s*])/, htmlTag: '<b><i>', mdMarker: '***' },
+        { name: 'bolditalic_u', regex: /(___)([^\s_])/, htmlTag: '<b><i>', mdMarker: '___' },
         { name: 'bold', regex: /(\*\*)([^\s*])/, htmlTag: '<b>', mdMarker: '**' },
+        { name: 'bold_u', regex: /(__)([^\s_])/, htmlTag: '<b>', mdMarker: '__' },
         { name: 'italic', regex: /(\*)([^\s*])/, htmlTag: '<i>', mdMarker: '*' },
+        { name: 'italic_u', regex: /(_)([^\s_])/, htmlTag: '<i>', mdMarker: '_' },
         { name: 'strikethrough', regex: /(~~)([^\s~])/, htmlTag: '<s>', mdMarker: '~~' }
     ],
 
@@ -183,6 +186,52 @@ const inlineStyleManager = {
             }
         }
 
+        // ── Image: ![alt](url) ──
+        // Detect closing ) preceded by ![alt](url) pattern
+        if (offset >= 6 && originalTextContentOfNode.charAt(offset - 1) === ')') {
+            const textBefore = originalTextContentOfNode.substring(0, offset);
+            const imgMatch = textBefore.match(/!\[([^\]]*)\]\(([^)]+)\)$/);
+            if (imgMatch) {
+                const altText = imgMatch[1];
+                const imgUrl = imgMatch[2];
+                console.log(`[InlineStyleManager] Image match: ![${altText}](${imgUrl})`);
+
+                const img = document.createElement('img');
+                img.src = imgUrl;
+                img.alt = altText;
+                img.title = altText || imgUrl;
+                img.setAttribute('contenteditable', 'false');
+
+                const matchStart = textBefore.lastIndexOf(imgMatch[0]);
+                const textBeforeImg = originalTextContentOfNode.substring(0, matchStart);
+                const textAfterImg = originalTextContentOfNode.substring(offset);
+
+                const zwsp = document.createTextNode('\u200B');
+                const fragment = document.createDocumentFragment();
+                if (textBeforeImg) fragment.appendChild(document.createTextNode(textBeforeImg));
+                fragment.appendChild(img);
+                fragment.appendChild(zwsp);
+                if (textAfterImg) fragment.appendChild(document.createTextNode(textAfterImg));
+
+                const parent = textNode.parentNode;
+                if (!parent) return false;
+                parent.replaceChild(fragment, textNode);
+
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.setStartAfter(zwsp);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                if (this.editor && this.editor.undoManager) {
+                    this.editor.undoManager.handleCustomChange('inlineImage');
+                }
+                console.log('[InlineStyleManager] Applied image');
+                return true;
+            }
+        }
+
         // ── Link: [text](url) ──
         // Detect closing ) — search backwards for the full [text](url) pattern
         if (offset >= 5 && originalTextContentOfNode.charAt(offset - 1) === ')') {
@@ -226,6 +275,53 @@ const inlineStyleManager = {
                     this.editor.undoManager.handleCustomChange('inlineLink');
                 }
                 console.log('[InlineStyleManager] Applied link');
+                return true;
+            }
+        }
+
+        // ── Autolink: bare URL detection ──
+        // Detect URLs when a space is typed after them (the space is the trigger char)
+        if (offset >= 9 && originalTextContentOfNode.charAt(offset - 1) === ' ') {
+            const textBefore = originalTextContentOfNode.substring(0, offset - 1); // exclude the space
+            const urlMatch = textBefore.match(/(https?:\/\/[^\s<>"']+)$/);
+            if (urlMatch) {
+                const url = urlMatch[1];
+                console.log(`[InlineStyleManager] Autolink match: ${url}`);
+
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.textContent = url;
+                anchor.title = url;
+                anchor.setAttribute('contenteditable', 'false');
+
+                const matchStart = textBefore.lastIndexOf(url);
+                const textBeforeUrl = originalTextContentOfNode.substring(0, matchStart);
+                const textAfterUrl = originalTextContentOfNode.substring(offset); // includes everything after space
+
+                const zwsp = document.createTextNode('\u200B');
+                const spaceNode = document.createTextNode(' ');
+                const fragment = document.createDocumentFragment();
+                if (textBeforeUrl) fragment.appendChild(document.createTextNode(textBeforeUrl));
+                fragment.appendChild(anchor);
+                fragment.appendChild(zwsp);
+                fragment.appendChild(spaceNode);
+                if (textAfterUrl) fragment.appendChild(document.createTextNode(textAfterUrl));
+
+                const parent = textNode.parentNode;
+                if (!parent) return false;
+                parent.replaceChild(fragment, textNode);
+
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.setStartAfter(spaceNode);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                if (this.editor && this.editor.undoManager) {
+                    this.editor.undoManager.handleCustomChange('autolink');
+                }
+                console.log('[InlineStyleManager] Applied autolink');
                 return true;
             }
         }
