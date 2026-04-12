@@ -55,46 +55,53 @@
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 1.3.1 | `> quote text` | — | ❌ | ✅ | 🔶 EXPORT ONLY |
-| 1.3.2 | `>> nested quote` | — | ❌ | ❌ | ❌ |
-| 1.3.3 | `> ` with multiple paragraphs | — | ❌ | ❌ | ❌ |
+| 1.3.1 | `> quote text` | Type `> ` + text | ✅ | ✅ | ✅ INPUT |
+| 1.3.2 | `>> nested quote` | Type `>> ` + text | ✅ | ✅ | ✅ INPUT |
+| 1.3.3 | `> ` with multiple paragraphs | Enter inside blockquote | ✅ | ✅ | ✅ INPUT |
 | 1.3.4 | `> ` with other block elements inside | — | ❌ | ❌ | ❌ |
 | 1.3.5 | Lazy continuation (no `>` on continuation lines) | — | ❌ | ❌ | ❌ |
+| 1.3.6 | Bare `>` (no trailing space) | — | ✅ | ✅ | ✅ PASTE |
+| 1.3.7 | Indented `   > text` (quote in list context) | — | ✅ | ✅ | ✅ PASTE |
 
-**Implementation**: `htmlToMarkdown` has `case 'blockquote'` for export. No input trigger. No paste conversion. **TARGET FOR NEW SUPPORT**.
+**Implementation**: `blockquoteManager.js` — regex `/^(>{1,5})\s(.*)$/` on input. Enter creates new line in quote, Enter on empty exits. Backspace at start unwraps. Nesting up to 5 levels. Paste handles bare `>`, indented `>`, and multi-line continuity.
 
 ### 1.4 Code Blocks
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 1.4.1 | Fenced: `` ```code``` `` | — | ❌ | ✅ | 🔶 EXPORT ONLY |
-| 1.4.2 | Fenced with language: `` ```js\ncode\n``` `` | — | ❌ | ❌ | ❌ |
+| 1.4.1 | Fenced: `` ``` `` | Type `` ``` `` | ✅ | ✅ | ✅ INPUT |
+| 1.4.2 | Fenced with language: `` ```js `` | Type `` ```js `` | ✅ | ✅ | ✅ INPUT |
 | 1.4.3 | Indented code block (4 spaces) | — | ❌ | ❌ | ❌ |
 | 1.4.4 | Fenced with tildes: `~~~code~~~` | — | ❌ | ❌ | ❌ |
+| 1.4.5 | Grayscale syntax highlighting | Auto on input + paste | ✅ | — | ✅ INPUT |
+| 1.4.6 | 20 language grammars | Alias resolution (js→javascript) | ✅ | ✅ | ✅ INPUT |
 
-**Implementation**: `htmlToMarkdown` has `case 'pre'` wrapping in backtick fences. No input trigger. No language detection. No syntax highlighting. **TARGET FOR NEW SUPPORT**.
+**Implementation**: `codeBlockManager.js` — regex `/^```(\w*)$/` on input. Creates `<div class="code-block">` with `<pre><code>`. Tab inserts 2 spaces, Escape exits, Enter creates newline (not div). `syntaxHighlighter.js` provides regex-based tokenization with 16 grayscale token classes. 20 languages: JavaScript, TypeScript, Python, HTML, CSS, JSON, Bash, SQL, C, C++, C#, Java, Rust, Go, Ruby, PHP, YAML, XML, Markdown, plaintext.
 
 ### 1.5 Horizontal Rules
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 1.5.1 | `---` (three dashes) | — | ❌ | ✅ | 🔶 EXPORT ONLY |
-| 1.5.2 | `***` (three asterisks) | — | ❌ | ❌ | ❌ |
-| 1.5.3 | `___` (three underscores) | — | ❌ | ❌ | ❌ |
+| 1.5.1 | `---` (three dashes) | Type `---` | ✅ | ✅ | ✅ INPUT |
+| 1.5.2 | `***` (three asterisks) | Type `***` | ✅ | ✅ | ✅ INPUT |
+| 1.5.3 | `___` (three underscores) | Type `___` | ✅ | ✅ | ✅ INPUT |
 | 1.5.4 | `- - -` (spaced dashes) | — | ❌ | ❌ | ❌ |
 
-**Implementation**: `htmlToMarkdown` has `case 'hr'`. No input trigger.
+**Implementation**: `editor.attemptBlockTransformations()` — regex `/^[-*_]{3,}\s*$/`. Creates `<hr>` + new `<div>` for caret. Paste via `markdownConverter.markdownToEditorHtml()`. Export via `editorHtmlToMarkdown()` `case 'hr'` → `---`.
 
 ### 1.6 Tables (GFM)
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 1.6.1 | Basic table with pipes | — | ❌ | ❌ | ❌ |
-| 1.6.2 | Header separator row `\|---\|---\|` | — | ❌ | ❌ | ❌ |
-| 1.6.3 | Column alignment `:---`, `:---:`, `---:` | — | ❌ | ❌ | ❌ |
-| 1.6.4 | Inline formatting within cells | — | ❌ | ❌ | ❌ |
+| 1.6.1 | Basic table with pipes | Type header + separator rows | ✅ | ✅ | ✅ INPUT |
+| 1.6.2 | Header separator row `\|---\|---\|` | Part of table trigger | ✅ | ✅ | ✅ INPUT |
+| 1.6.3 | Column alignment `:---`, `:---:`, `---:` | Parsed from separator | ✅ | ✅ | ✅ INPUT |
+| 1.6.4 | Inline formatting within cells | Typing inside cells | ✅ | ✅ | ✅ INPUT |
+| 1.6.5 | Tab/Shift+Tab cell navigation | Tab between cells | ✅ | — | ✅ INPUT |
+| 1.6.6 | Enter adds new row | Enter inside cell | ✅ | — | ✅ INPUT |
+| 1.6.7 | Arrow key row navigation | Up/Down arrows | ✅ | — | ✅ INPUT |
 
-**Implementation**: No support. **TARGET FOR NEW SUPPORT**.
+**Implementation**: `tableManager.js` — pipe-separated header + separator row triggers table creation. Tab/Shift+Tab navigates cells, Enter adds rows, Escape exits. Column alignment via `:---`, `:---:`, `---:`. Export produces padded GFM-compatible pipe tables.
 
 ### 1.7 Paragraphs & Line Breaks
 
@@ -155,24 +162,24 @@
 
 | # | Syntax | Input Trigger | Keyboard | Paste | Export | Status |
 |---|--------|---------------|----------|-------|--------|--------|
-| 2.5.1 | `` `code` `` (single backtick) | — | — | ❌ | ✅ | 🔶 EXPORT ONLY |
+| 2.5.1 | `` `code` `` (single backtick) | Type `` `text` `` char-by-char | — | ✅ | ✅ | ✅ INPUT |
 | 2.5.2 | ``` ``code`` ``` (double backtick) | — | — | ❌ | ❌ | ❌ |
 | 2.5.3 | Backtick with literal backtick inside | — | — | ❌ | ❌ | ❌ |
 
-**Implementation**: `htmlToMarkdown` has `case 'code'` producing backtick wrap. No input trigger.
+**Implementation**: `inlineStyleManager.js` — detects closing backtick, searches backwards for opening `` ` ``. Wraps content in `<code>` with ZWSP after. Paste via `_processInlineMarkdown()`. Export via `_processEditorInlineContent()` `case 'code'` → backtick wrap.
 
 ### 2.6 Links
 
 | # | Syntax | Input Trigger | Paste | Export | Status |
 |---|--------|---------------|-------|--------|--------|
-| 2.6.1 | `[text](url)` inline | — | ❌ | ✅ | 🔶 EXPORT ONLY |
+| 2.6.1 | `[text](url)` inline | Type `[text](url)` char-by-char | ✅ | ✅ | ✅ INPUT |
 | 2.6.2 | `[text](url "title")` with title | — | ❌ | ❌ | ❌ |
 | 2.6.3 | `[text][ref]` reference-style | — | ❌ | ❌ | ❌ |
 | 2.6.4 | `<url>` autolink | — | ❌ | ❌ | ❌ |
 | 2.6.5 | `https://...` extended autolink (GFM) | — | ❌ | ❌ | ❌ |
 | 2.6.6 | `user@email.com` email autolink (GFM) | — | ❌ | ❌ | ❌ |
 
-**Implementation**: `htmlToMarkdown` has `case 'a'` producing `[text](url)`. No input trigger.
+**Implementation**: `inlineStyleManager.js` — detects closing `)` with lookback for `[text](url)` pattern. Creates `<a>` with `contenteditable="false"` and ZWSP after. Paste via `_processInlineMarkdown()`. Export via `_processEditorInlineContent()` `case 'a'` → `[text](url)`.
 
 ### 2.7 Images
 
@@ -207,8 +214,8 @@
 
 | # | Syntax | Status |
 |---|--------|--------|
-| 3.1.1 | `- [ ] unchecked` | ❌ |
-| 3.1.2 | `- [x] checked` | ❌ |
+| 3.1.1 | `- [ ] unchecked` | ✅ INPUT + PASTE + EXPORT |
+| 3.1.2 | `- [x] checked` | ✅ INPUT + PASTE + EXPORT |
 
 ### 3.2 Footnotes
 
@@ -270,18 +277,29 @@
 
 | Category | Total | ✅ Supported | 🔶 Partial | ❌ Unsupported |
 |----------|-------|-------------|-----------|----------------|
-| Block Elements | 30 | 9 | 3 | 18 |
-| Inline Elements | 24 | 4 | 3 | 17 |
-| Extended (GFM+) | 14 | 0 | 0 | 14 |
-| **TOTAL** | **68** | **13** | **6** | **49** |
+| Block Elements | 36 | 25 | 0 | 11 |
+| Inline Elements | 24 | 6 | 1 | 17 |
+| Extended (GFM+) | 14 | 2 | 0 | 12 |
+| **TOTAL** | **74** | **33** | **1** | **40** |
+
+### Recently Implemented (this session)
+
+| Feature | Scope | Module | Tests |
+|---------|-------|--------|-------|
+| Block Quotes | Input + Paste + Export | `blockquoteManager.js` | BQ-01..07, PASTE-BQ-01..05 |
+| Fenced Code Blocks | Input + Paste + Export | `codeBlockManager.js` | CB-01..07, PASTE-CB-01 |
+| Grayscale Syntax Highlighting | 20 languages, 16 token classes | `syntaxHighlighter.js` | CB-03, PASTE-CB-01 |
+| Tables | Input + Paste + Export | `tableManager.js` | TBL-01..06, PASTE-TBL-01 |
+| Horizontal Rule | Input + Paste + Export | `editor.js` | HR-01..05 |
+| Inline Code | Input + Paste + Export | `inlineStyleManager.js` | IC-01..04 |
+| Task Lists | Input + Paste + Export | `listManager.js` | TASK-01..03 |
+| Links | Input + Paste + Export | `inlineStyleManager.js` | LINK-01..03 |
 
 ### Priority Features for Next Implementation
 
 | Priority | Feature | Complexity | Impact |
 |----------|---------|------------|--------|
-| **P0** | Block Quotes (`>`) | Medium | High — common in all markdown |
-| **P0** | Fenced Code Blocks (`` ``` ``) | High | High — essential for technical docs |
-| **P0** | Tables (`\| \|`) | High | High — essential for structured data |
-| **P1** | Inline Code (`` ` ``) | Low | Medium — very common |
-| **P1** | Horizontal Rule (`---`) | Low | Low — simple addition |
-| **P2** | Task Lists (`- [ ]`) | Medium | Medium — productivity feature |
+| **P2** | Images `![alt](src)` input trigger | Medium | Low |
+| **P2** | Link titles `[text](url "title")` | Low | Low |
+| **P3** | Character Escapes (`\*`) | Low | Low |
+| **P3** | Autolinks (`<url>`) | Low | Low |

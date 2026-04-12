@@ -114,6 +114,16 @@ const markdownConverter = {
                 processedLines.push(`<h${level}><span class="heading-marker" contenteditable="false">${headingMatch[1]}</span>\u200B${text}</h${level}>`);
                 continue;
             }
+
+            // Horizontal rule (---, ***, ___)
+            if (/^[-*_]{3,}\s*$/.test(line.trim())) {
+                if (inList) {
+                    processedLines.push(this._constructList(listItems, listType));
+                    inList = false; listItems = [];
+                }
+                processedLines.push('<hr>');
+                continue;
+            }
             
             // Unordered list item
             const ulMatch = line.match(/^(\s*)([-*+])\s+(.*)$/);
@@ -184,13 +194,7 @@ const markdownConverter = {
             
             // Process inline styles for non-list, non-heading lines
             if (line.trim() !== '') {
-                // Bold
-                let processedLine = line.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-                // Italic
-                processedLine = processedLine.replace(/\*([^*]+)\*/g, '<i>$1</i>');
-                // Strikethrough
-                processedLine = processedLine.replace(/~~([^~]+)~~/g, '<s>$1</s>');
-                
+                let processedLine = this._processInlineMarkdown(line);
                 processedLines.push(`<div>${processedLine}</div>`);
             } else if (line.trim() === '' && !inList) {
                 // Empty line not in a list
@@ -247,9 +251,7 @@ const markdownConverter = {
             }
 
             // Process inline styles in the line
-            let processed = line.text.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
-            processed = processed.replace(/\*([^*]+)\*/g, '<i>$1</i>');
-            processed = processed.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+            let processed = this._processInlineMarkdown(line.text);
 
             html += `<div>${processed || '<br>'}</div>`;
         }
@@ -261,6 +263,28 @@ const markdownConverter = {
         }
 
         return html;
+    },
+
+    /**
+     * Process inline markdown syntax in a single line of text.
+     * Handles: inline code, links, bold, italic, strikethrough
+     * @param {string} line - Raw text line
+     * @returns {string} HTML string
+     */
+    _processInlineMarkdown(line) {
+        if (!line) return '';
+        let result = line;
+        // Inline code (must come first — content inside backticks should not be processed)
+        result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Links [text](url)
+        result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" title="$2" contenteditable="false">$1</a>');
+        // Bold
+        result = result.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+        // Italic
+        result = result.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+        // Strikethrough
+        result = result.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+        return result;
     },
     
     /**
@@ -328,7 +352,35 @@ const markdownConverter = {
         for (const item of items) {
             // Create a new list item
             const li = document.createElement('li');
-            li.textContent = item.content;
+
+            // Check for task list syntax: [ ] or [x]
+            let content = item.content;
+            const taskMatch = content.match(/^\[( |x)\]\s*(.*)/i);
+            if (taskMatch && listType === 'ul') {
+                li.classList.add('task-list-item');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                const checked = taskMatch[1].toLowerCase() === 'x';
+                if (checked) {
+                    checkbox.setAttribute('checked', 'checked');
+                    checkbox.checked = true;
+                }
+                checkbox.classList.add('task-checkbox');
+                checkbox.setAttribute('contenteditable', 'false');
+                li.appendChild(checkbox);
+                content = taskMatch[2] || '';
+            }
+
+            // Process inline markdown in list item content
+            const processed = this._processInlineMarkdown(content);
+            if (processed !== content) {
+                // Contains HTML — use innerHTML
+                const span = document.createElement('span');
+                span.innerHTML = processed;
+                while (span.firstChild) li.appendChild(span.firstChild);
+            } else {
+                li.appendChild(document.createTextNode(content));
+            }
             
             // If indent level increased, create a new sublist
             if (item.level > currentLevel) {
@@ -503,6 +555,10 @@ const markdownConverter = {
                 else if (tagName === 'ul' || tagName === 'ol') {
                     markdown.push(this._processEditorList(node));
                 }
+                // Handle horizontal rule
+                else if (tagName === 'hr') {
+                    markdown.push('---');
+                }
                 // Handle blockquote elements
                 else if (tagName === 'blockquote') {
                     markdown.push(this._processEditorBlockquote(node, 1));
@@ -557,7 +613,15 @@ const markdownConverter = {
         for (const li of listElement.children) {
             if (li.nodeName.toLowerCase() === 'li') {
                 const indent = ' '.repeat(indentLevel * 2);
-                const marker = isOrdered ? `${itemIndex}.` : '-';
+                let marker = isOrdered ? `${itemIndex}.` : '-';
+
+                // Check for task list item
+                const isTask = li.classList.contains('task-list-item');
+                const checkbox = li.querySelector('input.task-checkbox');
+                let taskPrefix = '';
+                if (isTask && checkbox) {
+                    taskPrefix = checkbox.checked ? '[x] ' : '[ ] ';
+                }
                 
                 // Process inline content without special editor elements
                 let itemContent = '';
@@ -567,10 +631,10 @@ const markdownConverter = {
                     } else if (child.nodeType === Node.ELEMENT_NODE) {
                         const childTag = child.nodeName.toLowerCase();
                         if (childTag === 'ul' || childTag === 'ol') {
-                            // Handle nested list separately
                             itemContent += '\n' + this._processEditorList(child, indentLevel + 1);
+                        } else if (childTag === 'input' && child.classList.contains('task-checkbox')) {
+                            // Skip checkbox — already handled via taskPrefix
                         } else {
-                            // Process inline formatting
                             itemContent += this._processEditorInlineContent(child);
                         }
                     }
@@ -579,15 +643,13 @@ const markdownConverter = {
                 // Add this item to the list
                 const nestedListPattern = /\n(\s+)[-*+0-9.]/;
                 if (nestedListPattern.test(itemContent)) {
-                    // If item contains a nested list, handle spacing carefully
-                    listItems.push(`${indent}${marker} ${itemContent.split('\n')[0]}`);
-                    // Append the rest of the content which should be the nested list
+                    listItems.push(`${indent}${marker} ${taskPrefix}${itemContent.split('\n')[0]}`);
                     const restLines = itemContent.split('\n').slice(1).join('\n');
                     if (restLines.trim()) {
                         listItems.push(restLines);
                     }
                 } else {
-                    listItems.push(`${indent}${marker} ${itemContent.trim()}`);
+                    listItems.push(`${indent}${marker} ${taskPrefix}${itemContent.trim()}`);
                 }
                 
                 itemIndex++;
@@ -742,6 +804,12 @@ const markdownConverter = {
         
         // Process other inline styles
         let processedContent = markdown;
+        
+        // Inline code (first — content inside backticks not processed further)
+        processedContent = processedContent.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Links [text](url)
+        processedContent = processedContent.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" title="$2" contenteditable="false">$1</a>');
         
         // Bold
         processedContent = processedContent.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');

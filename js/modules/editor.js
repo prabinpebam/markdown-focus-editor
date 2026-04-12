@@ -765,6 +765,26 @@ const editor = {
             return true;
         }
 
+        // Try horizontal rule transformation (---, ***, ___)
+        if (/^[-*_]{3,}\s*$/.test(textContent.trim())) {
+            if (this.undoManager) this.undoManager.handleCustomChange('beforeHr');
+            const hr = document.createElement('hr');
+            blockNode.replaceWith(hr);
+            // Create new div after HR for caret
+            const newDiv = document.createElement('div');
+            newDiv.innerHTML = '<br>';
+            hr.parentNode.insertBefore(newDiv, hr.nextSibling);
+            const sel = window.getSelection();
+            const rng = document.createRange();
+            rng.setStart(newDiv, 0);
+            rng.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(rng);
+            if (this.undoManager) this.undoManager.handleCustomChange('createHr');
+            console.log('[Editor] Created horizontal rule');
+            return true;
+        }
+
         // Try code block transformation
         if (codeBlockManager.tryTransformToCodeBlock(blockNode, textContent)) {
             return true;

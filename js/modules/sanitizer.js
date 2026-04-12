@@ -14,10 +14,12 @@ const ALLOWED_TAGS = new Set([
     'blockquote',
     'pre', 'code',
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'a', 'hr', 'input',
 ]);
 
 const ALLOWED_ATTRS = new Set([
     'class', 'contenteditable', 'data-language', 'data-align',
+    'href', 'title', 'type', 'checked',
     'spellcheck', 'style',
 ]);
 

@@ -137,6 +137,99 @@ const inlineStyleManager = {
                 }
             }
         }
+
+        // ── Inline code: `text` ──
+        // Detect closing backtick — search backwards for opening backtick
+        if (offset >= 3 && originalTextContentOfNode.charAt(offset - 1) === '`') {
+            const textBefore = originalTextContentOfNode.substring(0, offset - 1);
+            const openIdx = textBefore.lastIndexOf('`');
+            if (openIdx >= 0 && openIdx < offset - 2) {
+                // Found `...` pair — content is between the two backticks
+                const codeContent = textBefore.substring(openIdx + 1);
+                if (codeContent.length > 0) {
+                    console.log(`[InlineStyleManager] Inline code match: \`${codeContent}\``);
+
+                    const codeEl = document.createElement('code');
+                    codeEl.textContent = codeContent;
+
+                    const textBeforeBacktick = originalTextContentOfNode.substring(0, openIdx);
+                    const textAfterClosing = originalTextContentOfNode.substring(offset);
+
+                    const zwsp = document.createTextNode('\u200B');
+                    const fragment = document.createDocumentFragment();
+                    if (textBeforeBacktick) fragment.appendChild(document.createTextNode(textBeforeBacktick));
+                    fragment.appendChild(codeEl);
+                    fragment.appendChild(zwsp);
+                    if (textAfterClosing) fragment.appendChild(document.createTextNode(textAfterClosing));
+
+                    const parent = textNode.parentNode;
+                    if (!parent) return false;
+                    parent.replaceChild(fragment, textNode);
+
+                    // Place caret after ZWSP
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.setStartAfter(zwsp);
+                    range.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+
+                    if (this.editor && this.editor.undoManager) {
+                        this.editor.undoManager.handleCustomChange('inlineCode');
+                    }
+                    console.log('[InlineStyleManager] Applied inline code');
+                    return true;
+                }
+            }
+        }
+
+        // ── Link: [text](url) ──
+        // Detect closing ) — search backwards for the full [text](url) pattern
+        if (offset >= 5 && originalTextContentOfNode.charAt(offset - 1) === ')') {
+            const textBefore = originalTextContentOfNode.substring(0, offset);
+            const linkMatch = textBefore.match(/\[([^\]]+)\]\(([^)]+)\)$/);
+            if (linkMatch) {
+                const linkText = linkMatch[1];
+                const linkUrl = linkMatch[2];
+                console.log(`[InlineStyleManager] Link match: [${linkText}](${linkUrl})`);
+
+                const anchor = document.createElement('a');
+                anchor.href = linkUrl;
+                anchor.textContent = linkText;
+                anchor.title = linkUrl;
+                anchor.setAttribute('contenteditable', 'false');
+
+                const matchStart = textBefore.lastIndexOf(linkMatch[0]);
+                const textBeforeLink = originalTextContentOfNode.substring(0, matchStart);
+                const textAfterLink = originalTextContentOfNode.substring(offset);
+
+                const zwsp = document.createTextNode('\u200B');
+                const fragment = document.createDocumentFragment();
+                if (textBeforeLink) fragment.appendChild(document.createTextNode(textBeforeLink));
+                fragment.appendChild(anchor);
+                fragment.appendChild(zwsp);
+                if (textAfterLink) fragment.appendChild(document.createTextNode(textAfterLink));
+
+                const parent = textNode.parentNode;
+                if (!parent) return false;
+                parent.replaceChild(fragment, textNode);
+
+                // Place caret after ZWSP
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.setStartAfter(zwsp);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                if (this.editor && this.editor.undoManager) {
+                    this.editor.undoManager.handleCustomChange('inlineLink');
+                }
+                console.log('[InlineStyleManager] Applied link');
+                return true;
+            }
+        }
+
         return false;
     },
 

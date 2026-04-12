@@ -7,26 +7,46 @@ const listManager = {
     },
 
     // Regex for UL and OL markers
-    // Group 1: Leading whitespace (for potential indentation later)
-    // Group 2: Marker itself (e.g., "-", "*", "+", "1.")
-    // Group 3: Text content after the marker and a space
     ulMarkerRegex: /^(\s*)([-*+])\s+(.*)/,
     olMarkerRegex: /^(\s*)(\d+\.)\s+(.*)/,
+    // Task list pattern: - [ ] text or - [x] text
+    taskRegex: /^\[( |x)\]\s*(.*)/i,
 
     /**
      * Converts a given block element (typically a DIV) into a list (UL or OL).
-     * @param {Node} blockNode - The block element to convert (e.g., a DIV).
-     * @param {RegExpMatchArray} match - The regex match object from ulMarkerRegex or olMarkerRegex.
-     * @param {string} listType - 'ul' or 'ol'.
-     * @returns {boolean} - True if transformation occurred, false otherwise.
      */
     convertBlockToList(blockNode, match, listType) {
         if (!this.editor || !blockNode || !match || !listType) return false;
 
-        const itemText = match[3] || ''; 
+        let itemText = match[3] || '';
+        let isTask = false;
+        let isChecked = false;
+
+        // Check if the list item is a task list item
+        if (listType === 'ul') {
+            const taskMatch = itemText.match(this.taskRegex);
+            if (taskMatch) {
+                isTask = true;
+                isChecked = taskMatch[1].toLowerCase() === 'x';
+                itemText = taskMatch[2] || '';
+            }
+        }
 
         const listElement = document.createElement(listType);
         const listItemElement = document.createElement('li');
+
+        if (isTask) {
+            listItemElement.classList.add('task-list-item');
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = isChecked;
+            checkbox.classList.add('task-checkbox');
+            checkbox.setAttribute('contenteditable', 'false');
+            checkbox.addEventListener('change', () => {
+                checkbox.checked = !checkbox.checked; // Toggle is handled by the click
+            });
+            listItemElement.appendChild(checkbox);
+        }
         
         const listItemTextNode = document.createTextNode(itemText);
         listItemElement.appendChild(listItemTextNode);

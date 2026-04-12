@@ -1851,6 +1851,79 @@ blockquote div:first-child {
     background: rgba(255, 255, 255, 0.03);
 }
 
+/* ── Horizontal Rule ── */
+#editor hr {
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.15);
+    margin: 1.5em 0;
+}
+
+.dark-theme #editor hr {
+    border-top-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Inline Code ── */
+#editor code {
+    font-family: 'Roboto Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 0.88em;
+    background: rgba(0, 0, 0, 0.06);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.dark-theme #editor code {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Don't style code inside code blocks (already styled) */
+.code-block code {
+    background: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    font-size: inherit !important;
+}
+
+/* ── Links ── */
+#editor a {
+    color: rgba(0, 0, 0, 0.5);
+    text-decoration: underline;
+    text-decoration-color: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+#editor a:hover {
+    color: rgba(0, 0, 0, 0.7);
+    text-decoration-color: rgba(0, 0, 0, 0.4);
+}
+
+.dark-theme #editor a {
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration-color: rgba(255, 255, 255, 0.2);
+}
+
+.dark-theme #editor a:hover {
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ── Task Lists ── */
+.task-list-item {
+    list-style: none;
+    position: relative;
+    margin-left: -1.2em;
+}
+
+.task-checkbox {
+    margin-right: 0.4em;
+    cursor: pointer;
+    vertical-align: middle;
+    accent-color: rgba(0, 0, 0, 0.6);
+}
+
+.dark-theme .task-checkbox {
+    accent-color: rgba(255, 255, 255, 0.6);
+}
+
 /* ── Minimal Auto-Hide Scrollbar ── */
 
 /* Hide scrollbar completely by default */
