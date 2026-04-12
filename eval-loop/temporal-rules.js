@@ -14,10 +14,12 @@ function checkBlockTypeTransitions(mutations) {
     span: ['div'],
   };
   // Also allow any tag → span (transient during DOM surgery)
+  // Also allow any tag → br (browser empties the editor on Ctrl+A+Delete)
   return mutations
     .filter((m) => m.field === 'type')
     .filter((m) => {
       if (m.newValue === 'span') return false; // Allow any → span (transient)
+      if (m.newValue === 'br') return false;   // Allow any → br (editor emptied)
       const allowed = valid[m.oldValue] || [];
       return allowed.indexOf(m.newValue) === -1;
     })

@@ -541,6 +541,23 @@ const editor = {
     },
 
     handleInputFormatting() {
+        // Clean up orphan text nodes: bare text nodes as direct children of #editor
+        // must be wrapped in <div>. This happens when contenteditable places text
+        // outside block elements (e.g., after navigating past ZWSP boundaries).
+        if (this.editorEl) {
+            const orphans = [];
+            for (const child of this.editorEl.childNodes) {
+                if (child.nodeType === Node.TEXT_NODE && child.textContent.trim().length > 0) {
+                    orphans.push(child);
+                }
+            }
+            for (const orphan of orphans) {
+                const div = document.createElement('div');
+                orphan.parentNode.insertBefore(div, orphan);
+                div.appendChild(orphan);
+            }
+        }
+
         // The check "if (this.isSelecting) return;" at the beginning of this function
         // might be too aggressive if 'isSelecting' is true just because Shift was held.
         // The 'input' event fires after a character (like 'A' from Shift+'a') is inserted.
