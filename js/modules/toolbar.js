@@ -242,18 +242,19 @@ const toolbar = {
     },
     
     adjustFontSize(delta) {
-        if (!this.editorEl) return;
-        const currentSize = parseInt(window.getComputedStyle(this.editorEl).fontSize, 10);
-        const newSize = Math.max(8, currentSize + delta);
+        const currentSize = parseInt(
+            getComputedStyle(document.documentElement).getPropertyValue('--base-font') || '16', 10
+        );
+        const newSize = Math.max(8, Math.min(48, currentSize + delta));
         this.setFontSize(newSize);
     },
 
     setFontSize(size) {
-        if (this.editorEl) {
-            this.editorEl.style.fontSize = `${size}px`;
-            storage.saveSettings('fontSize', size.toString());
-            console.log(`[Toolbar] Font size set to ${size}px`);
-        }
+        // Set --base-font CSS variable so ALL text scales relative to it,
+        // including headings (h1–h6 use calc(var(--base-font) * multiplier))
+        document.documentElement.style.setProperty('--base-font', `${size}px`);
+        storage.saveSettings('fontSize', size.toString());
+        console.log(`[Toolbar] Font size set to ${size}px (via --base-font)`);
     },
 
     handleThemeToggle() {
