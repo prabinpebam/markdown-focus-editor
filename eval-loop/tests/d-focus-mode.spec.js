@@ -11,15 +11,15 @@ evalTest('TF-20', 'Focus Mode Toggle', 'D. Focus Mode', async ({ page, cap, rec 
   await page.locator('#toolbar').click();
   await wait(400);
 
-  // Disable focus mode
+  // Disable focus mode — click the switch label (the checkbox is hidden inside it)
   rec(1, 'toggle', 'focus OFF');
-  await page.locator('#focus-toggle').click({ force: true });
+  await page.locator('label.switch').click({ force: true });
   await wait(200);
   await cap('after-toggle');
 
   // Re-enable
   rec(2, 'toggle', 'focus ON');
-  await page.locator('#focus-toggle').click({ force: true });
+  await page.locator('label.switch').click({ force: true });
   await wait(200);
   await cap('after-toggle');
 });

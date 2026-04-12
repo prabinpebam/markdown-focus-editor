@@ -148,8 +148,35 @@ const headingManager = {
         let reverted = false;
         for (const h of this.editor.editorEl.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
             const marker = h.querySelector('.heading-marker');
-            // If no marker, it's not a heading we manage, or it's severely broken. Skip.
-            if (!marker) continue;
+
+            // Case 1: Heading WITHOUT a marker — created by browser when Enter is pressed inside a heading.
+            // The browser clones the heading tag but not the custom marker span.
+            // Convert these orphan headings to <div>.
+            if (!marker) {
+                console.log(`[HeadingManager] Converting orphan ${h.tagName} (no marker) to DIV`);
+                const div = document.createElement('div');
+                while (h.firstChild) { div.appendChild(h.firstChild); }
+                h.replaceWith(div);
+                reverted = true;
+
+                if (this.editor.undoManager) {
+                    this.editor.undoManager.handleCustomChange(`convertOrphanH${h.tagName.substring(1)}`);
+                }
+
+                // Place caret at the start of the new div
+                const tn = div.firstChild;
+                if (tn) {
+                    try {
+                        const sel = window.getSelection();
+                        const rng = document.createRange();
+                        rng.setStart(tn, tn.nodeType === Node.TEXT_NODE ? 0 : 0);
+                        rng.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(rng);
+                    } catch(e) { /* caret positioning best-effort */ }
+                }
+                continue;
+            }
 
             // Find the first node after the marker. This should be a text node starting with ZWSP.
             let n = marker.nextSibling;
