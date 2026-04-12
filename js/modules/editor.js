@@ -80,8 +80,8 @@ const editor = {
         this.boundHandleKeyUp = this.handleKeyUp.bind(this);
         this.boundHandleClick = this.handleClick.bind(this);
         this.boundHandleEnterKeydown = this.handleEnterKeydown.bind(this);
-        // Paste is handled exclusively by pasteManager (initialized in app.js).
-        // Do NOT register a second paste listener here — it creates a conflict.
+        // Clipboard (copy/cut/paste) is handled by clipboardManager (initialized in app.js).
+        // Do NOT register paste/copy/cut listeners here.
 
 
         this.editorEl.addEventListener('keydown', this.boundHandleKeyDown);

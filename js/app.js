@@ -4,11 +4,12 @@ import fileManager from './modules/fileManager.js';
 import theme from './modules/theme.js';
 import storage from './modules/storage.js';
 import utils from './modules/utils.js';
-import undoManager from './modules/undoManager.js'; // Correctly import default
-import inlineStyleManager from './modules/inlineStyleManager.js'; // Import new manager
-import focusMode from './modules/focusMode.js'; // Import focus mode module
-import documentStore from './modules/documentStore.js'; // Ensure this is imported
-import modalManager from './modules/modalManager.js'; // Ensure this is imported
+import undoManager from './modules/undoManager.js';
+import inlineStyleManager from './modules/inlineStyleManager.js';
+import focusMode from './modules/focusMode.js';
+import documentStore from './modules/documentStore.js';
+import modalManager from './modules/modalManager.js';
+import clipboardManager from './modules/clipboardManager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] DOM content loaded, initializing modules');
@@ -47,6 +48,11 @@ document.addEventListener('DOMContentLoaded', () => {
     focusMode.init(editor); // Pass editor instance
     editor.focusMode = focusMode; // Make it accessible from editor instance
     console.log('[App] FocusMode initialized and linked to editor');
+
+    // Initialize ClipboardManager (handles copy/cut/paste)
+    clipboardManager.init(editor);
+    editor.clipboardManager = clipboardManager;
+    console.log('[App] ClipboardManager initialized and linked to editor');
 
     // Initialize the document modal manager
     modalManager.init(); // Ensure modalManager is initialized
