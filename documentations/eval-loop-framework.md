@@ -1,23 +1,71 @@
 # Evaluation Loop Framework — Markdown Focus Editor
 
-> **Version**: 1.0  
-> **Date**: April 11, 2026  
-> **Scope**: An evaluation framework for verifying feature correctness in the Markdown Focus Editor — a browser-based `contenteditable` editor where DOM rendering behavior is non-deterministic across browsers, paste sources, and user interaction patterns. Evaluation criteria come from user expectations and taskflows, not implementation details.  
+> **Version**: 2.0  
+> **Date**: April 12, 2026  
+> **Scope**: An evaluation framework for identifying gaps between actual app behavior and desired user behavior in the Markdown Focus Editor.  
 > **Adapted from**: The Agnostic Evaluation Loop Framework (v2.0)
 
 ---
 
-## 0. Why This Editor Needs an Eval Loop
+## Eval Is Not Test
 
-Traditional unit tests assume deterministic output: given input X, expect output Y. This breaks for a `contenteditable`-based editor because:
+This distinction is fundamental and must not be blurred.
 
-- **Browser behavior is non-deterministic.** Pressing Enter, Backspace, or pasting content produces different DOM structures in Chrome vs. Firefox vs. Safari. The same user action yields different internal HTML.
-- **DOM transformations interact unpredictably.** Heading creation, list nesting, inline styling, and focus mode all modify the same DOM tree. The order of operations and edge-case combinations can't be enumerated upfront.
-- **Paste content is unbounded.** Users paste from Word, Google Docs, VS Code, web pages, and other editors. Each source produces different HTML. The editor must normalize all of it.
-- **Focus mode depends on visual layout.** The SVG mask tracks visual line positions via character-level Y-coordinate sampling. Line wrapping, font loading, and zoom level all affect the result.
-- **Undo/redo snapshots entire innerHTML.** Any DOM corruption (orphaned ZWSPs, empty tags, broken heading markers) gets baked into the undo stack and resurfaces on undo.
+| | **Traditional Tests (TDD)** | **Evaluation Loop** |
+|---|---|---|
+| **Purpose** | Verify code does what the code says | Identify gaps between what the user sees and what the user expects |
+| **Expectations** | Hardcoded assertions: `expect(x).toBe(y)` | No imposed expectations during observation — record first, evaluate later |
+| **Observation** | Checks specific values at specific moments | Captures the full state of the system across time, agnostic of implementation |
+| **Scope** | One function, one component, one code path | The entire user-visible experience from the user's perspective |
+| **What drives it** | Implementation details (function signatures, return values) | User behavior expectations (taskflows, scenarios, what a person would expect to see) |
+| **When it fails** | Code doesn't match the assertion | System doesn't match user expectations — which may never have been coded |
+| **Determinism** | Deterministic: same input → same expected output | Non-deterministic: same user action may produce different DOM across browsers |
+| **Discovery** | Tests only what you thought to test | Discovers issues you never anticipated — the recording captures everything |
 
-The eval loop observes the **actual running editor** from the user's perspective, records what they would see after each interaction, and checks invariants that must hold regardless of which browser or content produced the DOM.
+### The eval loop protocol
+
+```
+1. OBSERVE — Record what the system actually does
+   The capture function reads the DOM, the store, the visual state.
+   It does NOT check whether anything is "right" — it just records.
+   No assertions. No expectations. Pure observation.
+
+2. RECORD — Structure the observation as a timeline
+   Snapshots across time, mutations between frames, anomalies inline.
+   The recording is a diagnostic artifact — it survives the session.
+
+3. EVALUATE — Apply heuristic and semantic checks AFTER recording
+   Heuristic: Boolean invariants (is there an orphan text node? a missing marker?)
+   Temporal: Rules over the mutation timeline (did a state go backwards?)
+   Semantic: Open-ended questions (would a user be confused by this?)
+   
+   Evaluation criteria come from USER EXPECTATIONS, not from code.
+   "Does the user see what they should see, given what they did?"
+
+4. IDENTIFY GAPS — The delta between actual and expected
+   Anomalies are not "test failures" — they are observations that
+   diverge from what a user would expect. Some may be acceptable.
+   Some may reveal bugs nobody anticipated.
+
+5. FIX — Close the gap between actual and expected behavior
+   Fix the app, not the eval. The eval doesn't change.
+
+6. RE-OBSERVE — Run the loop again to verify the gap is closed
+   New recording, new evaluation. Did the fix work?
+   Did it introduce new gaps elsewhere?
+```
+
+### Why this matters for contenteditable editors
+
+Traditional tests assume deterministic output: given input X, expect output Y. This breaks for a `contenteditable` editor because:
+
+- **Browser behavior is non-deterministic.** Pressing Enter, Backspace, or pasting content produces different DOM structures in Chrome vs. Firefox vs. Safari.
+- **DOM transformations interact unpredictably.** Heading creation, list nesting, inline styling, and focus mode all modify the same DOM tree.
+- **Paste content is unbounded.** Users paste from Word, Google Docs, VS Code, web pages. Each produces different HTML.
+- **Focus mode depends on visual layout.** The SVG mask tracks visual line positions. Line wrapping, font loading, and zoom level all affect the result.
+- **Undo/redo snapshots entire innerHTML.** Any DOM corruption gets baked into the undo stack and resurfaces.
+
+A hardcoded test can only verify what you thought to check. The eval loop observes the **actual running editor** from the user's perspective, records what they would see, and then — separately, after the fact — evaluates whether that matches what a user would expect.
 
 ---
 
