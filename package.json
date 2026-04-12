@@ -1,0 +1,17 @@
+{
+  "name": "markdown-focus-editor",
+  "version": "1.0.0",
+  "description": "A simple, distraction-free Markdown editor built with Electron, focusing on one heading section at a time. This editor helps you concentrate on the current part of your document by dimming other sections.",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "eval": "npx playwright test --reporter=list",
+    "eval:headed": "npx playwright test --headed --reporter=list"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}
