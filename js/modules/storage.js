@@ -2,6 +2,7 @@ import editor from './editor.js';
 import theme from './theme.js';
 import toolbar from './toolbar.js';
 import documentStore from './documentStore.js';
+import sanitizer from './sanitizer.js';
 
 const storage = {
     loadSettings() {
@@ -52,7 +53,7 @@ const storage = {
         }
 
         if (docToLoad && editorEl) {
-            editorEl.innerHTML = docToLoad.content;
+            editorEl.innerHTML = sanitizer.sanitizeHtml(docToLoad.content);
         } else {
             // Fallback: No current valid doc, or no currentDocId at all
             const allDocs = documentStore.getAllDocuments();
@@ -60,7 +61,7 @@ const storage = {
                 // Load the most recently edited document if no specific currentDocId or if it was invalid
                 const mostRecentDoc = allDocs.sort((a, b) => new Date(b.lastEdited) - new Date(a.lastEdited))[0];
                 if (mostRecentDoc && editorEl) {
-                    editorEl.innerHTML = mostRecentDoc.content;
+                    editorEl.innerHTML = sanitizer.sanitizeHtml(mostRecentDoc.content);
                     localStorage.setItem('currentDocId', mostRecentDoc.id);
                     console.log(`[Storage] Loaded most recent document: ${mostRecentDoc.id}`);
                 }
@@ -68,7 +69,7 @@ const storage = {
                 // No documents in store, load lastContent if any, or default to blank
                 const lastContent = localStorage.getItem('lastContent'); // Legacy fallback
                 if (lastContent && editorEl) {
-                    editorEl.innerHTML = lastContent;
+                    editorEl.innerHTML = sanitizer.sanitizeHtml(lastContent);
                     console.log(`[Storage] Loaded legacy lastContent (${lastContent.length} chars)`);
                 } else if (editorEl && editorEl.innerHTML.trim() === '') { // Only if editor is truly empty
                     // If truly no content and no docs, create a first default document
@@ -83,7 +84,16 @@ const storage = {
     },
 
     saveSettings(key, value) {
-        localStorage.setItem(key, value);
+        try {
+            localStorage.setItem(key, value);
+        } catch (e) {
+            if (e.name === 'QuotaExceededError' || e.code === 22) {
+                console.error('[Storage] localStorage quota exceeded for key:', key);
+                alert('Storage is full. Please export a backup and delete old documents.');
+                return;
+            }
+            throw e;
+        }
         // console.log(`[Storage] Saved setting: ${key} = ${key === 'lastContent' ? `(${value.length} chars)` : value}`);
         
         // If saving content (which editor.js calls 'lastContent'), update the current document

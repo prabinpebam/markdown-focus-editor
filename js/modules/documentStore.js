@@ -1,4 +1,5 @@
 const DOC_STORAGE_KEY = 'markdownFocusEditorDocs';
+const CURRENT_SCHEMA_VERSION = 1;
 
 /**
  * Generates a unique ID based on timestamp and a random suffix.
@@ -35,11 +36,23 @@ function getDocuments() {
 }
 
 /**
- * Saves all documents to localStorage.
+ * Saves all documents to localStorage with QuotaExceededError handling.
  * @param {Document[]} docsArray - An array of Document objects.
+ * @returns {boolean} True if save succeeded, false if quota exceeded.
  */
 function _saveAllDocumentsToStorage(docsArray) {
-    localStorage.setItem(DOC_STORAGE_KEY, JSON.stringify(docsArray));
+    try {
+        localStorage.setItem(DOC_STORAGE_KEY, JSON.stringify(docsArray));
+        return true;
+    } catch (e) {
+        if (e.name === 'QuotaExceededError' || e.code === 22) {
+            console.error('[DocumentStore] localStorage quota exceeded. Export a backup and delete old documents.');
+            alert('Storage is full. Please export a backup and delete old documents to free space.');
+        } else {
+            console.error('[DocumentStore] Failed to save documents:', e);
+        }
+        return false;
+    }
 }
 
 /**
@@ -82,6 +95,7 @@ function saveDocument(docData) {
         const newName = docData.name || generateTitleFromContent(docData.content || '');
         const newDoc = {
             id: newId,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
             name: newName,
             content: docData.content || '',
             createdAt: now,

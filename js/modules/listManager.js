@@ -214,8 +214,8 @@ const listManager = {
         let outdented = false;
         let targetElementForCaret = listItemElement; // Default to current LI
 
-        // const isFirstItemInCurrentList = !listItemElement.previousElementSibling; // Not strictly needed for the revised logic below
-        // const isLastItemInCurrentList = !listItemElement.nextElementSibling; // Not strictly needed for the revised logic below
+        const isFirstItemInCurrentList = !listItemElement.previousElementSibling;
+        const isLastItemInCurrentList = !listItemElement.nextElementSibling;
 
         // Collect following siblings *before* moving listItemElement or modifying currentList structure around it.
         const followingSiblingsInCurrentList = [];

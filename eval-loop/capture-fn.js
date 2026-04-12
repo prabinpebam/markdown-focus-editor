@@ -166,14 +166,20 @@ const CAPTURE_FN = `(function() {
   var editorWrapper = qs(document, '.editor-wrapper');
   var maskImage = '';
   try {
+    // Check inline style first (where focusMode.js sets it directly)
     if (editorWrapper) {
-      var ws = window.getComputedStyle(editorWrapper);
-      maskImage = ws.maskImage || ws.webkitMaskImage || ws.getPropertyValue('-webkit-mask-image') || '';
+      maskImage = editorWrapper.style.maskImage || editorWrapper.style.webkitMaskImage || '';
+    }
+    // Fallback to computed style
+    if (!maskImage || maskImage === 'none') {
+      if (editorWrapper) {
+        var ws = window.getComputedStyle(editorWrapper);
+        maskImage = ws.maskImage || ws.webkitMaskImage || ws.getPropertyValue('-webkit-mask-image') || '';
+      }
     }
     if (!maskImage || maskImage === 'none') {
       if (editor) {
-        var es = window.getComputedStyle(editor);
-        maskImage = es.maskImage || es.webkitMaskImage || es.getPropertyValue('-webkit-mask-image') || '';
+        maskImage = editor.style.maskImage || editor.style.webkitMaskImage || '';
       }
     }
   } catch(e) {}

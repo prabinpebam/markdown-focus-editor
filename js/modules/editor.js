@@ -69,8 +69,6 @@ const editor = {
         this.editorEl.focus();
 
         this.isSelecting = false;
-
-        this.preDomSnapshot = null;
         this.lastLogTrigger = null;
 
         // Bind 'this' for methods called directly or indirectly by event listeners
@@ -82,15 +80,14 @@ const editor = {
         this.boundHandleKeyUp = this.handleKeyUp.bind(this);
         this.boundHandleClick = this.handleClick.bind(this);
         this.boundHandleEnterKeydown = this.handleEnterKeydown.bind(this);
-        // Add new binding for paste
-        this.boundHandlePaste = this.handlePaste.bind(this);
+        // Paste is handled exclusively by pasteManager (initialized in app.js).
+        // Do NOT register a second paste listener here — it creates a conflict.
 
 
         this.editorEl.addEventListener('keydown', this.boundHandleKeyDown);
         this.editorEl.addEventListener('mousedown', this.boundHandleMouseDown);
         document.addEventListener('mouseup',  this.boundHandleMouseUp);
         this.editorEl.addEventListener('keyup', this.boundHandleKeyUp);
-        this.editorEl.addEventListener('paste', this.boundHandlePaste); // Add paste listener
         
         this.editorEl.addEventListener('input', () => {
             if (!this.lastLogTrigger) {

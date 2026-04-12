@@ -4,6 +4,7 @@
  */
 
 import markdownConverter from './markdownConverter.js';
+import sanitizer from './sanitizer.js';
 
 const pasteManager = {
     editor: null,
@@ -63,8 +64,8 @@ const pasteManager = {
         console.log('[PASTE HTML] Converted to editor HTML:', 
             editorHtml.length > 500 ? editorHtml.substring(0, 500) + '...' : editorHtml);
         
-        // 3. Insert the formatted content
-        this.insertHtmlAtCursor(editorHtml);
+        // 3. Sanitize and insert the formatted content
+        this.insertHtmlAtCursor(sanitizer.sanitizeHtml(editorHtml));
     },
 
     /**
@@ -257,14 +258,15 @@ const pasteManager = {
         
         // Process the content for proper formatting
         if (this.editor && typeof this.editor.processContent === 'function') {
-            setTimeout(() => {
-                this.editor.processContent();
-                console.log('[PASTE INSERT] Editor content after processing:', 
-                    this.editor.editorEl.innerHTML.length > 500 ? 
-                    this.editor.editorEl.innerHTML.substring(0, 500) + '...' : 
-                    this.editor.editorEl.innerHTML);
-            }, 10);
-        }
+            // Trigger undo recording and focus update after paste
+            if (this.editor && this.editor.undoManager) {
+                setTimeout(() => {
+                    this.editor.undoManager.handleCustomChange('paste');
+                    if (this.editor.focusMode) {
+                        this.editor.focusMode.updateFocusIfActive();
+                    }
+                }, 10);
+            }
     },
 
     /**

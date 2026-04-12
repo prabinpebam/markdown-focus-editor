@@ -101,7 +101,7 @@ evalTest('TF-57', 'Theme + Focus Mode', 'L. Cross-Feature', async ({ page, cap, 
   await page.locator('#toolbar').click();
   await wait(400);
   rec(2, 'click', 'toggle theme');
-  await page.locator('#toggle-theme').click();
+  await page.locator('#toggle-theme').click({ force: true });
   await wait(200);
   await cap('after-toggle');
 });

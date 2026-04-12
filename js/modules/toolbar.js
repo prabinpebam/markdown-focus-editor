@@ -2,6 +2,7 @@ import storage from './storage.js';
 import documentStore from './documentStore.js';
 import editor from './editor.js';
 import theme from './theme.js';
+import sanitizer from './sanitizer.js';
 
 const toolbar = {
     editorEl: null,
@@ -217,7 +218,7 @@ const toolbar = {
         const newDoc = documentStore.createNewDocument(docName, '<div><br></div>');
         
         if (this.editorEl) {
-            this.editorEl.innerHTML = newDoc.content;
+            this.editorEl.innerHTML = sanitizer.sanitizeHtml(newDoc.content);
             this.editorEl.focus();
         }
         

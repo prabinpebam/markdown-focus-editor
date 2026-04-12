@@ -5,6 +5,7 @@
 
 import documentStore from './documentStore.js';
 import editor from './editor.js';
+import sanitizer from './sanitizer.js';
 
 const modalManager = {
     modalElement: null,
@@ -216,7 +217,7 @@ const modalManager = {
             border: 1px solid #eee;
         `;
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = doc.content || '';
+        tempDiv.textContent = (doc.content || '').replace(/<[^>]+>/g, ' ').substring(0, 200);
         const previewText = tempDiv.textContent.trim();
         preview.textContent = previewText.substring(0, 200) + (previewText.length > 200 ? '...' : '');
         thumb.appendChild(preview);
@@ -284,7 +285,7 @@ const modalManager = {
         console.log('[ModalManager] Loading document:', docId);
         const doc = documentStore.getDocumentById(docId);
         if (doc && editor.editorEl) {
-            editor.editorEl.innerHTML = doc.content;
+            editor.editorEl.innerHTML = sanitizer.sanitizeHtml(doc.content);
             localStorage.setItem('currentDocId', docId);
             
             if (editor.undoManager) {

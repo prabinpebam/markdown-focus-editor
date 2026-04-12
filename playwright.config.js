@@ -7,15 +7,20 @@ module.exports = defineConfig({
   outputDir: './test-results/editor-eval',
   timeout: 120_000,
   retries: 0,
-  workers: 1, // Sequential — each test uses shared localStorage
+  workers: 1,
   reporter: [['list'], ['json', { outputFile: './test-results/eval-summary.json' }]],
+  webServer: {
+    command: 'npx serve -l 3456 --no-clipboard',
+    port: 3456,
+    reuseExistingServer: true,
+  },
   use: {
-    baseURL: `file:///${path.resolve(__dirname, 'index.html').replace(/\\/g, '/')}`,
+    baseURL: 'http://localhost:3456',
     screenshot: 'only-on-failure',
     trace: 'off',
-    headless: false, // Always show the real browser so captures are valid
+    headless: false,
     launchOptions: {
-      slowMo: 50, // Slight slowdown so visual state is observable
+      slowMo: 50,
     },
   },
   projects: [

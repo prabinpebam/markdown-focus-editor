@@ -11,7 +11,7 @@ const {
 const { ALL_TEMPORAL_CHECKERS } = require('../temporal-rules');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const INDEX_URL = `file:///${path.join(ROOT, 'index.html').replace(/\\/g, '/')}`;
+const INDEX_URL = '/index.html'; // Served via webServer in playwright.config.js
 const OUTPUT_ROOT = path.join(ROOT, 'test-results', 'editor-eval');
 
 /**

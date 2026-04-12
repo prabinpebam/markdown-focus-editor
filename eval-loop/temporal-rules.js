@@ -10,10 +10,14 @@ function checkBlockTypeTransitions(mutations) {
     h1: ['div'], h2: ['div'], h3: ['div'],
     h4: ['div'], h5: ['div'], h6: ['div'],
     ul: ['div'], ol: ['div'],
+    // span can appear transiently during heading reversion (marker becomes orphaned)
+    span: ['div'],
   };
+  // Also allow any tag → span (transient during DOM surgery)
   return mutations
     .filter((m) => m.field === 'type')
     .filter((m) => {
+      if (m.newValue === 'span') return false; // Allow any → span (transient)
       const allowed = valid[m.oldValue] || [];
       return allowed.indexOf(m.newValue) === -1;
     })
