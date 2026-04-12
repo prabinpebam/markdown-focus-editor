@@ -10,18 +10,21 @@ const theme = {
     init() {
         this.themeToggleButton = document.getElementById('toggle-theme');
         if (this.themeToggleButton) {
-            // Create the bound function only once and store it at module level
             if (!boundToggleThemeFunction) {
                 boundToggleThemeFunction = this.toggleTheme.bind(this);
-                console.log('[Theme] Created module-level boundToggleThemeFunction');
             }
-
-            // Always remove before adding to be safe, using the module-level singleton reference
             this.themeToggleButton.removeEventListener('click', boundToggleThemeFunction);
             this.themeToggleButton.addEventListener('click', boundToggleThemeFunction);
-            console.log('[Theme] Event listener attached/re-attached.');
         }
-        // Initial theme application is handled by storage.loadSettings which should call applyTheme
+
+        // Listen for system theme changes (only applies if user hasn't explicitly overridden)
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (!localStorage.getItem('theme')) {
+                // No explicit user override — follow system
+                this.applyTheme(e.matches ? 'dark' : 'light');
+                console.log(`[Theme] System theme changed to ${e.matches ? 'dark' : 'light'}`);
+            }
+        });
     },
 
     applyTheme(themeName) {
@@ -43,20 +46,19 @@ const theme = {
         console.log('[Theme] Toggle theme attempt started');
         if (isCurrentlyToggling) {
             console.log('[Theme] Debounce: Toggle already in progress, ignoring request');
-            return; // Prevent rapid re-execution
+            return;
         }
         isCurrentlyToggling = true;
 
         const currentThemeIsDark = document.body.classList.contains('dark-theme');
         const newTheme = currentThemeIsDark ? 'light' : 'dark';
         this.applyTheme(newTheme);
+        // Save explicitly — this marks the user as having overridden system default
         storage.saveSettings('theme', newTheme);
-        console.log(`[Theme] Theme toggled from ${currentThemeIsDark ? 'dark' : 'light'} to ${newTheme}`);
+        console.log(`[Theme] Theme toggled to ${newTheme} (explicit user override)`);
 
-        // Reset the flag after a short delay
         setTimeout(() => {
             isCurrentlyToggling = false;
-            console.log('[Theme] Debounce: Flag reset, ready for next toggle');
         }, 100);
     }
 };

@@ -10,9 +10,18 @@ const storage = {
         const editorEl = document.getElementById('editor'); // Get editor element once
 
         // Load and apply theme
-        const themePref = localStorage.getItem('theme') || 'light'; // Default to 'light' string
+        // Respect system preference unless user explicitly overrode
+        const savedTheme = localStorage.getItem('theme');
+        let themePref;
+        if (savedTheme) {
+            // User explicitly chose a theme — use it
+            themePref = savedTheme;
+        } else {
+            // No explicit choice — follow system preference
+            themePref = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
         theme.applyTheme(themePref);
-        console.log(`[Storage] Applied theme: ${themePref}`);
+        console.log(`[Storage] Applied theme: ${themePref}${savedTheme ? ' (user override)' : ' (system default)'}`);
 
         // Load and apply font family
         const fontFamily = localStorage.getItem('fontFamily');
