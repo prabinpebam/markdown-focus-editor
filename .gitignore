@@ -1,2 +1,4 @@
 node_modules/
 test-results/
+dist/
+build/icon-256.png

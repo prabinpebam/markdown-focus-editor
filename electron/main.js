@@ -25,8 +25,38 @@ if (!gotTheLock) {
   });
 }
 
-// ── Settings persistence ──
-const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
+// ── Portable data path ──
+// Portable exe: PORTABLE_EXECUTABLE_DIR is set by electron-builder's portable wrapper
+// It points to the directory containing the .exe file.
+// Store data/ next to the exe for true portability.
+// In development: use Electron's default userData.
+function getPortableDataPath() {
+  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
+  if (portableDir) {
+    // Portable mode: store data next to the exe
+    return path.join(portableDir, 'data');
+  }
+  if (app.isPackaged) {
+    // Packaged but not portable (installed): use exe directory
+    return path.join(path.dirname(app.getPath('exe')), 'data');
+  }
+  // Development
+  return app.getPath('userData');
+}
+
+const DATA_DIR = getPortableDataPath();
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Override Electron's userData path to keep everything portable
+if (process.env.PORTABLE_EXECUTABLE_DIR || app.isPackaged) {
+  app.setPath('userData', DATA_DIR);
+}
+
+const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
 
 function loadSettings() {
   try {
@@ -83,6 +113,7 @@ function createWindow() {
     y: windowState.y,
     frame: false,
     show: false,
+    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

@@ -1,20 +1,57 @@
 {
   "name": "markdown-focus-editor",
   "version": "1.0.0",
-  "description": "A simple, distraction-free Markdown editor built with Electron, focusing on one heading section at a time. This editor helps you concentrate on the current part of your document by dimming other sections.",
+  "description": "A simple, distraction-free Markdown editor built with Electron, focusing on one heading section at a time.",
   "main": "electron/main.js",
+  "author": "Prabin Pebam",
+  "license": "ISC",
   "scripts": {
     "start": "electron .",
+    "build": "electron-builder",
+    "build:portable": "electron-builder",
     "test": "npx playwright test",
     "eval": "npx playwright test --reporter=list",
-    "eval:headed": "npx playwright test --headed --reporter=list"
+    "eval:headed": "npx playwright test --headed --reporter=list",
+    "generate-icon": "node build/generate-icon.js"
+  },
+  "build": {
+    "appId": "com.prabinpebam.markdown-focus-editor",
+    "productName": "MarkdownFocusEditor",
+    "directories": {
+      "output": "dist"
+    },
+    "portable": {
+      "artifactName": "MarkdownFocusEditor.exe",
+      "requestExecutionLevel": "user",
+      "unpackDirName": "MarkdownFocusEditor-Runtime"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "files": [
+      "electron/**/*",
+      "js/**/*",
+      "style/**/*",
+      "images/**/*",
+      "index.html",
+      "build/icon.ico"
+    ],
+    "extraResources": [],
+    "asar": false
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "electron": "^41.2.0",
-    "serve": "^14.2.6"
+    "electron-builder": "^26.8.1",
+    "png-to-ico": "^3.0.1",
+    "serve": "^14.2.6",
+    "sharp": "^0.34.5"
   }
 }
