@@ -32,14 +32,24 @@ const theme = {
         if (themeName === 'dark') {
             document.body.classList.add('dark-theme');
         } else {
-            document.body.classList.add('light-theme'); // Default to light
+            document.body.classList.add('light-theme');
         }
-        // Update icon
+        // Update toolbar toggle icon
         if (this.themeToggleButton && this.themeToggleButton.querySelector('img')) {
             this.themeToggleButton.querySelector('img').src = themeName === 'dark' ? 'images/light-theme.svg' : 'images/dark-theme.svg';
             this.themeToggleButton.querySelector('img').alt = themeName === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme';
         }
-        console.log(`[Theme] Applied ${themeName} theme.`); // This is line 26 from the log
+        // Update title bar app icon (dark icon on light bg, light icon on dark bg)
+        const titleIcon = document.getElementById('title-icon');
+        if (titleIcon) {
+            titleIcon.src = themeName === 'dark' ? 'images/favicon-light.svg' : 'images/favicon-dark.svg';
+        }
+        // Update HTML favicon
+        const favicon = document.querySelector('link[rel="icon"]');
+        if (favicon) {
+            favicon.href = themeName === 'dark' ? 'images/favicon-light.svg' : 'images/favicon-dark.svg';
+        }
+        console.log(`[Theme] Applied ${themeName} theme.`);
     },
 
     toggleTheme() {
