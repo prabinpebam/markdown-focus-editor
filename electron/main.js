@@ -2,6 +2,29 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// ── Single instance lock ──
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, argv) => {
+    // Focus existing window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+
+      // Open file from second instance's args
+      const fileArg = argv.find(a =>
+        a.endsWith('.md') || a.endsWith('.txt') || a.endsWith('.markdown')
+      );
+      if (fileArg && fs.existsSync(fileArg)) {
+        openFile(path.resolve(fileArg));
+      }
+    }
+  });
+}
+
 // ── Settings persistence ──
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
 
@@ -81,8 +104,20 @@ function createWindow() {
     const fileArg = process.argv.find(a => a.endsWith('.md') || a.endsWith('.txt') || a.endsWith('.markdown'));
     if (fileArg && fs.existsSync(fileArg)) {
       openFile(path.resolve(fileArg));
-    } else if (settings.lastFilePath && fs.existsSync(settings.lastFilePath)) {
-      openFile(settings.lastFilePath);
+    } else if (settings.lastFilePath) {
+      if (fs.existsSync(settings.lastFilePath)) {
+        openFile(settings.lastFilePath);
+      } else {
+        // Last file no longer exists — notify user
+        updateTitleBar('Untitled', 'untitled');
+        mainWindow.webContents.send('file-error', {
+          action: 'open',
+          code: 'NOT_FOUND',
+          message: `Previous file not found: ${path.basename(settings.lastFilePath)}`,
+        });
+        settings.lastFilePath = null;
+        saveSettings(settings);
+      }
     } else {
       updateTitleBar('Untitled', 'untitled');
     }
@@ -116,6 +151,14 @@ function openFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf8');
     currentFilePath = filePath;
 
+    // Check if file is read-only
+    let isReadOnly = false;
+    try {
+      fs.accessSync(filePath, fs.constants.W_OK);
+    } catch (e) {
+      isReadOnly = true;
+    }
+
     // Start file watcher
     startFileWatcher(filePath);
 
@@ -124,20 +167,23 @@ function openFile(filePath) {
       path: filePath,
       name: path.basename(filePath),
       content: content,
+      readOnly: isReadOnly,
     });
 
-    updateTitleBar(path.basename(filePath), 'normal');
+    const state = isReadOnly ? 'readonly' : 'normal';
+    updateTitleBar(path.basename(filePath), state);
     settings.lastFilePath = filePath;
     saveSettings(settings);
 
     // Add to recent files
     addToRecentFiles(filePath);
 
-    console.log(`[Main] Opened: ${filePath}`);
+    console.log(`[Main] Opened: ${filePath}${isReadOnly ? ' (read-only)' : ''}`);
   } catch (e) {
     console.error(`[Main] Failed to open ${filePath}:`, e.message);
     mainWindow.webContents.send('file-error', {
       action: 'open',
+      code: e.code || 'UNKNOWN',
       message: `Could not open file: ${e.message}`,
     });
   }
@@ -145,32 +191,72 @@ function openFile(filePath) {
 
 function saveFile(filePath, content) {
   try {
+    // Check if file is read-only
+    try {
+      fs.accessSync(filePath, fs.constants.W_OK);
+    } catch (accessErr) {
+      if (accessErr.code === 'EACCES' || accessErr.code === 'EPERM') {
+        mainWindow.webContents.send('file-error', {
+          action: 'save',
+          code: 'READONLY',
+          message: `File is read-only: ${path.basename(filePath)}`,
+        });
+        return false;
+      }
+      // File doesn't exist yet — that's fine, we'll create it
+    }
+
     // Atomic write: write to temp, then rename
     const tempPath = filePath + '.tmp';
     fs.writeFileSync(tempPath, content, 'utf8');
     fs.renameSync(tempPath, filePath);
     lastSaveTime = Date.now();
     updateTitleBar(path.basename(filePath), 'normal');
+    mainWindow.webContents.send('file-saved', {
+      path: filePath,
+      name: path.basename(filePath),
+    });
     console.log(`[Main] Saved: ${filePath} (${content.length} chars)`);
     return true;
   } catch (e) {
+    let userMessage = `Save failed: ${e.message}`;
+    let code = 'UNKNOWN';
+
+    if (e.code === 'ENOSPC') {
+      userMessage = 'Disk is full. Free up space and try again.';
+      code = 'DISK_FULL';
+    } else if (e.code === 'EACCES' || e.code === 'EPERM') {
+      userMessage = `Permission denied: ${path.basename(filePath)}`;
+      code = 'READONLY';
+    } else if (e.code === 'EBUSY') {
+      userMessage = `File is locked by another program: ${path.basename(filePath)}`;
+      code = 'LOCKED';
+    }
+
     console.error(`[Main] Save failed for ${filePath}:`, e.message);
     mainWindow.webContents.send('file-error', {
       action: 'save',
-      message: `Save failed: ${e.message}`,
+      code,
+      message: userMessage,
     });
 
-    // Retry once after 2 seconds
-    setTimeout(() => {
-      try {
-        fs.writeFileSync(filePath, content, 'utf8');
-        lastSaveTime = Date.now();
-        updateTitleBar(path.basename(filePath), 'normal');
-        console.log(`[Main] Retry save succeeded: ${filePath}`);
-      } catch (retryErr) {
-        console.error(`[Main] Retry save also failed:`, retryErr.message);
-      }
-    }, 2000);
+    // Retry once after 2 seconds for transient errors
+    if (code !== 'READONLY' && code !== 'DISK_FULL') {
+      setTimeout(() => {
+        try {
+          fs.writeFileSync(filePath, content, 'utf8');
+          lastSaveTime = Date.now();
+          updateTitleBar(path.basename(filePath), 'normal');
+          mainWindow.webContents.send('file-saved', {
+            path: filePath,
+            name: path.basename(filePath),
+          });
+          console.log(`[Main] Retry save succeeded: ${filePath}`);
+        } catch (retryErr) {
+          console.error(`[Main] Retry save also failed:`, retryErr.message);
+        }
+      }, 2000);
+    }
 
     return false;
   }
@@ -310,4 +396,15 @@ ipcMain.on('save-content', (event, content) => {
   if (currentFilePath) {
     saveFile(currentFilePath, content);
   }
+});
+
+ipcMain.handle('file:newFile', async () => {
+  // Auto-save current file before creating new
+  if (currentFilePath) {
+    // Content will be sent separately via save-content channel
+  }
+  stopFileWatcher();
+  currentFilePath = null;
+  updateTitleBar('Untitled', 'untitled');
+  return true;
 });

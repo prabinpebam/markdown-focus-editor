@@ -17,11 +17,13 @@ const validInvokeChannels = [
   'file:reload',
   'file:getPath',
   'file:getRecent',
+  'file:newFile',
 ];
 
 // One-way: main → renderer
 const validReceiveChannels = [
   'file-opened',
+  'file-saved',
   'file-error',
   'file-external-change',
   'title-bar-update',

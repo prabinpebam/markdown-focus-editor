@@ -25,7 +25,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #ffffff;
+    background: #f5f5f5; /* Same as body background — seamless */
     color: #333;
     z-index: 9999;
     font-family: 'Segoe UI', system-ui, sans-serif;
@@ -82,6 +82,11 @@ body {
     opacity: 0.5;
 }
 
+#title-bar.readonly #title-text::after {
+    content: ' (read-only)';
+    opacity: 0.5;
+}
+
 #window-controls {
     display: flex;
     height: 100%;
@@ -112,7 +117,7 @@ body {
 
 /* ── Title bar in dark theme ── */
 body.dark-theme #title-bar {
-    background: #1e1e1e;
+    background: #1a1a1a; /* Same as body.dark-theme background — seamless */
     color: #cccccc;
 }
 
@@ -128,6 +133,132 @@ body.dark-theme #btn-close:hover {
 /* When title bar is visible, push body content down */
 body.has-title-bar {
     padding-top: 52px; /* 32px title bar + 20px original padding */
+}
+
+/* Push toolbar down when title bar is visible */
+body.has-title-bar #toolbar {
+    top: 72px; /* 32px title bar + 40px original top */
+}
+
+/* When notification bar is also visible, add more offset */
+body.has-notification-bar {
+    padding-top: 84px; /* 32px title + 32px notification + 20px padding */
+}
+
+body.has-notification-bar #toolbar {
+    top: 104px; /* 32px title + 32px notification + 40px */
+}
+
+/* ── Notification Bar ── */
+#notification-bar {
+    position: fixed;
+    top: 32px; /* Below title bar */
+    left: 0;
+    right: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: #fff3cd;
+    color: #856404;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    z-index: 9998;
+    padding: 0 16px;
+    border-bottom: 1px solid #ffc107;
+}
+
+#notification-bar button {
+    padding: 2px 10px;
+    border: 1px solid #856404;
+    border-radius: 3px;
+    background: transparent;
+    color: #856404;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+#notification-bar button:hover {
+    background: rgba(133, 100, 4, 0.1);
+}
+
+#notification-bar button:focus-visible {
+    outline: 2px solid #0078d4;
+    outline-offset: 1px;
+}
+
+#notification-actions {
+    display: flex;
+    gap: 6px;
+}
+
+body.dark-theme #notification-bar {
+    background: #332b00;
+    color: #ffc107;
+    border-bottom-color: #554400;
+}
+
+body.dark-theme #notification-bar button {
+    color: #ffc107;
+    border-color: #ffc107;
+}
+
+body.dark-theme #notification-bar button:hover {
+    background: rgba(255, 193, 7, 0.1);
+}
+
+/* ── Save Toast ── */
+#save-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #107c10;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+#save-toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+#save-toast.hidden {
+    display: block; /* keep in DOM but transparent */
+}
+
+body.dark-theme #save-toast {
+    background: #0e6b0e;
+}
+
+/* ── Focus ring for title bar buttons ── */
+#window-controls button:focus-visible {
+    outline: 2px solid #0078d4;
+    outline-offset: -2px;
+}
+
+/* ── Fullscreen: hide title bar ── */
+body.fullscreen #title-bar,
+body.fullscreen #notification-bar {
+    display: none !important;
+}
+
+body.fullscreen.has-title-bar {
+    padding-top: 20px; /* Restore original padding */
+}
+
+body.fullscreen.has-title-bar #toolbar {
+    top: 40px; /* Restore original position */
 }
 
 /* Editor should not handle its own scrolling */
