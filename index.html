@@ -17,6 +17,20 @@
   <link rel="stylesheet" href="style/main.css">
 </head>
 <body>
+
+  <!-- Custom Title Bar (Electron only — hidden in web) -->
+  <div id="title-bar" class="drag-region" style="display:none;">
+    <div id="title-left" class="no-drag">
+      <img id="title-icon" src="images/favicon.svg" alt="" width="16" height="16">
+      <span id="title-unsaved-dot" class="hidden">●</span>
+      <span id="title-text" aria-live="polite">Untitled</span>
+    </div>
+    <div id="window-controls" class="no-drag">
+      <button id="btn-minimize" aria-label="Minimize">&#x2014;</button>
+      <button id="btn-maximize" aria-label="Maximize">&#x25A1;</button>
+      <button id="btn-close" aria-label="Close">&#x2715;</button>
+    </div>
+  </div>
   
   <!-- SVG mask for focus mode -->
   <svg class="svg-defs" width="100%" height="100%">

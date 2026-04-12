@@ -3,6 +3,7 @@ import documentStore from './documentStore.js';
 import editor from './editor.js';
 import theme from './theme.js';
 import sanitizer from './sanitizer.js';
+import markdownConverter from './markdownConverter.js';
 
 const toolbar = {
     editorEl: null,
@@ -184,6 +185,8 @@ const toolbar = {
             const currentDoc = documentStore.getDocumentById(currentDocId);
             if (currentDoc) {
                 documentStore.updateDocument(currentDocId, { content: content });
+                // Download as .md file
+                this.downloadAsMarkdown(currentDoc.name || 'Untitled');
                 this.showSaveNotification(`Document "${currentDoc.name}" saved.`);
             } else {
                 this.promptAndSaveNewDocument(content);
@@ -191,6 +194,34 @@ const toolbar = {
         } else {
             this.promptAndSaveNewDocument(content);
         }
+    },
+
+    /**
+     * Download the current editor content as a clean .md file.
+     * Converts editor HTML to standard markdown — no ZWSPs, no marker spans, no HTML tags.
+     */
+    downloadAsMarkdown(filename) {
+        if (!this.editorEl) return;
+
+        // Convert editor HTML to clean markdown
+        const markdown = markdownConverter.editorHtmlToMarkdown(this.editorEl.innerHTML);
+
+        // Sanitize filename for OS
+        const safeName = filename.replace(/[<>:"/\\|?*]/g, '_').substring(0, 200);
+        const fullName = safeName.endsWith('.md') ? safeName : safeName + '.md';
+
+        // Create and trigger download
+        const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fullName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        console.log(`[Toolbar] Downloaded "${fullName}" (${markdown.length} chars)`);
     },
     
     promptAndSaveNewDocument(content) {

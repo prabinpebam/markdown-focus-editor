@@ -10,6 +10,7 @@ import focusMode from './modules/focusMode.js';
 import documentStore from './modules/documentStore.js';
 import modalManager from './modules/modalManager.js';
 import clipboardManager from './modules/clipboardManager.js';
+import electronBridge from './modules/electronBridge.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('[App] DOM content loaded, initializing modules');
@@ -58,6 +59,10 @@ document.addEventListener('DOMContentLoaded', () => {
     modalManager.init(); // Ensure modalManager is initialized
     console.log('[App] ModalManager initialized');
 
+    // Initialize Electron bridge (no-op in web mode)
+    electronBridge.init();
+    console.log('[App] ElectronBridge initialized (isElectron:', electronBridge.isElectron, ')');
+
     // Load persisted settings such as theme, font size, focus state, etc.
     storage.loadSettings(); // Should ideally be called after editor and other modules are ready
     console.log('[App] Settings loaded from storage');
@@ -79,6 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Consolidated keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+    // In Electron, shortcuts are handled by electronBridge (capture phase)
+    if (electronBridge.isElectron) return;
+
     // Ctrl+O - Open document modal
     if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
         e.preventDefault();

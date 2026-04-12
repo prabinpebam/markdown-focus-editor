@@ -28,11 +28,26 @@ function generateTitleFromContent(content) {
 
 /**
  * Retrieves all documents from localStorage.
+ * Handles corrupted data gracefully — returns empty array on parse error.
  * @returns {Document[]} An array of Document objects.
  */
 function getDocuments() {
-    const docsJson = localStorage.getItem(DOC_STORAGE_KEY);
-    return docsJson ? JSON.parse(docsJson) : [];
+    try {
+        const docsJson = localStorage.getItem(DOC_STORAGE_KEY);
+        if (!docsJson) return [];
+        const docs = JSON.parse(docsJson);
+        if (!Array.isArray(docs)) {
+            console.error('[DocumentStore] Document data is not an array. Resetting.');
+            return [];
+        }
+        return docs;
+    } catch (e) {
+        console.error('[DocumentStore] Failed to parse document data:', e.message);
+        alert('Document storage data was corrupted. Starting with a fresh state.');
+        // Reset corrupted data
+        try { localStorage.removeItem(DOC_STORAGE_KEY); } catch(_) {}
+        return [];
+    }
 }
 
 /**
