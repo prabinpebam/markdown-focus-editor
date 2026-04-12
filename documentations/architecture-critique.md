@@ -1,10 +1,14 @@
 # Markdown Focus Editor — Architecture Critique & Improvement Report
 
+> **Version**: 2.0 (revised with code-level verification)  
+> **Date**: April 12, 2026  
+> **Method**: Every claim in this document was verified against the actual source code. Line references point to the live codebase. Claims from v1.0 that proved inaccurate have been corrected and marked.
+
 ## 1. Executive Summary
 
 The Markdown Focus Editor is a browser-based, zero-dependency contenteditable Markdown writing tool with a unique "focus mode" that dims everything except the current line. The codebase is ~3,200 lines of vanilla JavaScript across 15 ES modules, with no build step, no framework, and no external runtime dependencies.
 
-**Overall assessment:** The core design philosophy — "leverage browser defaults, intervene minimally" — is sound and aligns with how successful lightweight editors work. However, the implementation has accumulated structural debt that undermines that philosophy. The app is functional but fragile, and several architectural decisions will make it increasingly difficult to extend or debug.
+**Overall assessment:** The core design philosophy — "leverage browser defaults, intervene minimally" — is sound and aligns with how successful lightweight editors work. However, the implementation has accumulated significant structural debt. Two runtime bugs (undefined variables in list outdentation, paste handler conflict) can crash or produce wrong behavior during normal use. Security gaps (unsanitized innerHTML from imports/paste) are exploitable. And the state management — while not entirely absent — is fragmented across modules with no single source of truth.
 
 ---
 
@@ -19,24 +23,35 @@ For a focused writing tool, zero dependencies means instant load, zero supply ch
 ### 2.3 Focus mode via SVG mask
 Using an SVG viewport mask rather than per-element opacity is clever — it avoids z-index battles, works across block boundaries, and handles wrapped lines correctly with character-level Y-position sampling.
 
-### 2.4 Document model in localStorage
-The multi-document store with import/export, conflict resolution, and storage quota tracking is a well-thought-out feature for a zero-backend app.
+### 2.4 Multi-document store
+The document store with import/export, conflict resolution UI, and storage quota tracking is a well-thought-out feature for a zero-backend app.
 
 ---
 
 ## 3. Architectural Critique
 
-### 3.1 No Document Model (Critical)
+### 3.1 Fragmented State Without a Document Model
 
-**The most significant architectural gap.** The editor has **no abstract document model**. The DOM IS the model. Every module reads and writes the DOM directly.
+**Correction from v1.0:** The original critique stated "the DOM IS the model" with no intermediate data structures. This is inaccurate. Multiple modules maintain independent state:
+
+| Module | State It Maintains | Synced With DOM? |
+|--------|--------------------|-----------------|
+| `undoManager.history[]` | Array of `{html, caretPos, timestamp, operation}` objects (up to 50) | Yes — full innerHTML snapshots |
+| `editor.isSelecting` | Boolean selection tracking flag | Loosely — set on keydown/mouseup |
+| `editor.preDomSnapshot` | innerHTML string captured before Enter/Backspace | **Never read back** (dead code) |
+| `focusMode.isFocusMode` | Boolean toggle state | Yes — synced with checkbox |
+| `theme.isCurrentlyToggling` | Debounce flag | N/A |
+| `documentStore` (localStorage) | Full document array as JSON | On save only |
+
+**The real problem is not "no model" — it's fragmented, uncoordinated state.** The undo system maintains a parallel model (innerHTML snapshots) but it's not used by any other module. The document store maintains another model (JSON in localStorage) but it's only synced on explicit save. The live truth is the DOM, but there's no mechanism to derive a canonical representation from it.
 
 Why this matters:
-- **Undo/redo** snapshots entire `innerHTML` strings (expensive, lossy for caret position).
-- **Save** serializes whatever the DOM looks like at that moment — including browser-injected elements, ZWSPs, orphaned `<br>` tags.
+- **Undo/redo** snapshots entire `innerHTML` strings — each snapshot is 10–50KB for a typical document. At 50 states, that's 0.5–2.5MB in memory. Comparing consecutive snapshots for deduplication requires full string equality.
+- **Save** serializes whatever the DOM looks like at that moment — including browser-injected elements, ZWSPs (`\u200B`), orphaned `<br>` tags, and any structure the browser decided to create.
 - **Paste** must round-trip through HTML → Markdown → HTML because there's no canonical representation to normalize into.
-- **Testing** is impossible without a browser — you can't unit-test any logic without JSDOM or a real DOM.
+- **Testing** is impossible without a browser — you can't unit-test the transformation logic without JSDOM or a real DOM.
 
-Every serious editor (ProseMirror, Slate, Tiptap, CodeMirror) separates the document model from the view. **This is the single design decision that would yield the highest return if changed.**
+Every serious editor (ProseMirror, Slate, Tiptap, CodeMirror) separates the document model from the view. This is the single design decision that would yield the highest return if changed.
 
 | Editor | Document Model | View Layer |
 |--------|---------------|------------|
@@ -44,7 +59,7 @@ Every serious editor (ProseMirror, Slate, Tiptap, CodeMirror) separates the docu
 | Slate | JSON tree with operations | React (or custom) rendering |
 | Tiptap | ProseMirror schema | ProseMirror + extensions |
 | CodeMirror 6 | Immutable `Text` object | Custom viewport renderer |
-| **This editor** | **The DOM itself** | **The DOM itself** |
+| **This editor** | **Fragmented: DOM + innerHTML snapshots + localStorage JSON** | **The DOM itself** |
 
 ### 3.2 Caret Management is a Multiplying Liability
 
