@@ -1,104 +1,111 @@
 # Markdown Focus Editor
 
-A simple, distraction-free Markdown editor built with Electron, focusing on one heading section at a time. This editor helps you concentrate on the current part of your document by dimming other sections.
+A distraction-free Markdown editor with a unique focus mode that dims everything except the line you're working on. Built with vanilla JavaScript and Electron — no frameworks, no build step.
+
+## Download
+
+**[Download Portable (Windows x64)](release/MarkdownFocusEditor-Portable.zip)** — Extract and run. No installation needed. Settings stored in `data/` folder next to the exe.
 
 ## Features
 
-*   **Focus Mode:** Highlights the current heading section (e.g., text under an `H1`, `H2`, etc.) and dims the rest of the document.
-*   **Real-time Markdown Preview:** (Currently basic, renders Markdown on file save/change)
-*   **File Operations:** Open, save, and save-as Markdown files.
-*   **Theme Toggle:** Switch between light and dark themes.
-*   **Section Navigation:** Quickly jump to the next or previous heading section.
-*   **Basic Formatting:** Apply bold, italic, and strikethrough using keyboard shortcuts.
-*   **Find Functionality:** Search for text within the editor.
-*   **Auto Save:** Automatically saves the file at regular intervals (currently every 30 seconds).
-*   **Word Count:** Displays the word count for the current section and the entire document.
-*   **Recent Files:** Access recently opened files.
-*   **Adjustable Dimming Level:** Control the opacity of non-focused sections.
+### Focus Mode
+An SVG mask dims all text except the current line. The mask tracks your cursor position in real-time, covering the exact character bounding box (not line-height) for precise visual focus.
 
-## Screenshots
+### Markdown Support (39/74 CommonMark + GFM)
 
-*(Consider adding new screenshots if the UI has changed significantly)*
-*TODO: Add updated screenshots*
+| Category | Supported |
+|----------|-----------|
+| **Headings** | `# ` through `###### ` — live input trigger with heading markers |
+| **Lists** | `- `, `* `, `+ ` (unordered), `1. ` (ordered), Tab/Shift+Tab nesting |
+| **Task Lists** | `- [ ] ` unchecked, `- [x] ` checked — interactive checkboxes |
+| **Block Quotes** | `> ` with nesting up to 5 levels, Enter/Backspace behavior |
+| **Code Blocks** | `` ``` `` with 20-language grayscale syntax highlighting |
+| **Tables** | Pipe syntax with alignment (`:---:`) , Tab cell navigation, Enter adds rows |
+| **Horizontal Rule** | `---`, `***`, `___` |
+| **Bold** | `**text**` and `__text__` — input trigger + Ctrl+B |
+| **Italic** | `*text*` and `_text_` — input trigger + Ctrl+I |
+| **Strikethrough** | `~~text~~` — input trigger + Ctrl+Shift+S |
+| **Inline Code** | `` `code` `` — input trigger on closing backtick |
+| **Links** | `[text](url)` — input trigger + autolinks on space after URLs |
+| **Images** | `![alt](url)` — input trigger on closing parenthesis |
+| **Character Escapes** | `\*`, `\[`, `\\` — prevents false formatting triggers |
 
-## Usage
+All features work across three paths: **typing** (live input), **paste** (markdown clipboard), and **export** (save as .md).
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/markdown-focus-editor.git
-    cd markdown-focus-editor
-    ```
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    ```
-3.  **Run the application:**
-    ```bash
-    npm start
-    ```
+### Syntax Highlighting
+Code blocks use **grayscale-only** highlighting — 16 token classes (keywords bold, comments italic) in shades of grey. No color. Supports: JavaScript, TypeScript, Python, HTML, CSS, JSON, Bash, SQL, C, C++, C#, Java, Rust, Go, Ruby, PHP, YAML, XML, Markdown.
 
-### Editing
+### Editor
+- Contenteditable-based — no textarea, no CodeMirror
+- Undo/Redo with custom state management
+- Copy produces clean markdown (`text/plain`) + formatted HTML (`text/html`)
+- Paste converts markdown → editor HTML automatically
+- Font size scaling (headings scale proportionally via CSS variable)
 
-*   Type your Markdown content in the left-hand editor pane.
-*   The editor will automatically identify heading sections (H1, H2, H3, etc.).
-*   The section you are currently editing will be fully opaque, while other sections will be dimmed.
-*   Clicking into a different section will shift the focus.
+### Electron Desktop App
+- Custom frameless title bar with backdrop blur (content scrolls underneath)
+- Auto-save (500ms debounce, atomic write via temp+rename)
+- File operations: Ctrl+O (open), Ctrl+S (save), Ctrl+Shift+S (save as), Ctrl+N (new)
+- Drag-and-drop file open, CLI argument open, recent files
+- File watching with external change notification (Reload/Ignore)
+- Window state persistence (position, size, maximized)
+- Single instance lock
+- Dark/light theme follows system preference (overridable by user toggle)
+- Portable: settings in `data/` next to exe, no AppData, no registry
 
-## Keybindings
+### Theme
+- Light and dark themes with system preference detection
+- Explicit toggle overrides system default
+- Runtime listener updates theme when system preference changes
+- Theme-aware app icon (dark icon on light bg, light icon on dark bg)
 
-*   **File Operations:**
-    *   `Ctrl+O`: Open File
-    *   `Ctrl+S`: Save File
-    *   `Ctrl+Shift+S`: Save File As
-    *   `Ctrl+N`: New File (Opens an empty untitled file)
-*   **Editing & Navigation:**
-    *   `Ctrl+F`: Find
-    *   `Ctrl+B`: Toggle Bold (`**text**`)
-    *   `Ctrl+I`: Toggle Italic (`*text*`)
-    *   `Ctrl+Shift+X` or `Ctrl+Shift+K`: Toggle Strikethrough (`~~text~~`)
-    *   `Alt+UpArrow`: Move to Previous Section
-    *   `Alt+DownArrow`: Move to Next Section
-    *   `Ctrl+PageUp` or `Ctrl+Shift+Tab`: Previous Tab (if multiple files are open)
-    *   `Ctrl+PageDown` or `Ctrl+Tab`: Next Tab (if multiple files are open)
-    *   `Ctrl+W` or `Ctrl+F4`: Close Current Tab
-*   **View:**
-    *   `Ctrl+Shift+I`: Toggle Developer Tools
-    *   `Ctrl+R` or `F5`: Reload
-    *   `Ctrl+Shift+L`: Toggle Theme (Light/Dark)
-    *   `Ctrl+Plus` or `Ctrl+Shift+Plus`: Zoom In
-    *   `Ctrl+-`: Zoom Out
-    *   `Ctrl+0`: Reset Zoom
-    *   `F11`: Toggle Fullscreen
-*   **Focus Mode:**
-    *   `Alt+L`: Toggle Focus Mode (globally enables/disables dimming)
-    *   `Alt+ShiftUpArrow`: Decrease Dimming Level (make non-focused text more visible)
-    *   `Alt+ShiftDownArrow`: Increase Dimming Level (make non-focused text less visible)
+## Quick Start
 
-## How Focus Mode Works
+```bash
+git clone https://github.com/prabinpebam/markdown-focus-editor.git
+cd markdown-focus-editor
+npm install
+npm start
+```
 
-The editor parses the Markdown content and identifies lines starting with `#`, `##`, `###`, etc., as headings. When your cursor is within a block of text associated with a heading, that entire section (from the heading to just before the next heading of the same or higher level, or the end of the document) is considered "focused." All other sections are dimmed.
+## Build Portable
 
-## Future Enhancements / Ideas
+```bash
+npm run build
+# Output: dist/MarkdownFocusEditor.exe (87 MB self-extracting portable)
+```
 
-*   [x] More robust Markdown preview (e.g., using a library like `marked` or `markdown-it` with live updates). - *Partially implemented, updates on change.*
-*   [x] Theme persistence. - *Implemented*
-*   [ ] Customizable keyboard shortcuts.
-*   [x] Improved section detection logic (e.g., handling horizontal rules or other separators). - *Improved*
-*   [ ] Export to HTML/PDF.
-*   [x] Word count (current section / total). - *Implemented*
-*   [x] Recent files list. - *Implemented*
-*   [x] Auto-save feature. - *Implemented*
-*   [ ] Spell check.
-*   [ ] Support for different Markdown flavors.
-*   [x] Adjustable dimming level. - *Implemented*
-*   [ ] Table editing assistance.
-*   [ ] Image pasting/uploading.
-*   [ ] Presentation mode (viewing one section at a time, full screen).
-*   [ ] Better handling of unsaved changes (e.g., asterisk in title, prompt on close).
-*   [ ] Tabbed interface for multiple open files. - *Implemented*
-*   [ ] Command Palette (`Ctrl+Shift+P`).
-*   [ ] Outline view/Table of Contents panel.
+## Eval Loop
 
-## Contributing
+The project uses an agnostic eval loop framework for quality assurance — 187 Playwright-based scenarios that capture DOM snapshots, run temporal/heuristic/semantic evaluation, and detect formatting anomalies.
 
-Contributions are welcome! Please open an issue or submit a pull request for any bugs, features, or improvements.
+```bash
+npm run eval          # Run all 187 eval captures
+npm run eval:headed   # Run with visible browser
+```
+
+## Project Structure
+
+```
+electron/           Electron main process (main.js, preload.js)
+js/modules/         Editor modules (17 ES modules)
+  editor.js           Core editor with contenteditable
+  headingManager.js   Heading creation/reversion
+  listManager.js      List creation/indent/outdent + task lists
+  blockquoteManager.js Blockquote creation/nesting
+  codeBlockManager.js  Code block creation/keyboard
+  tableManager.js     Table creation/cell navigation
+  inlineStyleManager.js Bold/italic/strikethrough/code/links/images
+  syntaxHighlighter.js  20-language grayscale tokenizer
+  markdownConverter.js  Bidirectional markdown ↔ HTML
+  clipboardManager.js  Copy/cut/paste pipeline
+  focusMode.js        SVG mask focus tracking
+  ...
+style/main.css      All styling (scrollbar, title bar, themes)
+eval-loop/          Eval loop framework + 187 test scenarios
+build/              Icon generation scripts
+```
+
+## License
+
+ISC
