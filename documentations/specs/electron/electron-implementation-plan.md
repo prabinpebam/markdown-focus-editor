@@ -145,9 +145,38 @@ G1-1: Frameless BrowserWindow
   });
 
 G1-2: Custom title bar HTML/CSS
+  Layout: [Icon | Filename] ---------- [Min | Max | Close]
+
   <div id="title-bar" class="drag-region">
-    <span id="title-icon">📝</span>
-    <span id="title-text">Untitled — Markdown Focus Editor</span>
+    <div id="title-left" class="no-drag">
+      <img id="title-icon" src="icon.svg" alt="" width="16" height="16">
+      <span id="title-unsaved-dot" class="hidden">●</span>
+      <span id="title-text" aria-live="polite">Untitled</span>
+    </div>
+    <div id="window-controls" class="no-drag">
+      <button id="btn-minimize" aria-label="Minimize">&#x2014;</button>
+      <button id="btn-maximize" aria-label="Maximize">☐</button>
+      <button id="btn-close" aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  CSS:
+    #title-bar { height: 32px; display: flex; justify-content: space-between;
+                 align-items: center; -webkit-app-region: drag; }
+    #title-left { display: flex; align-items: center; gap: 8px;
+                  padding-left: 12px; -webkit-app-region: no-drag; }
+    #title-icon { width: 16px; height: 16px; }
+    #title-text { font: 500 13px system-ui; }
+    #title-unsaved-dot { color: #c0c0c0; font-size: 10px; }
+    #title-unsaved-dot.hidden { display: none; }
+    #window-controls { display: flex; -webkit-app-region: no-drag; }
+    #window-controls button { width: 46px; height: 32px; border: none;
+                              background: transparent; font-size: 12px; }
+    #btn-close:hover { background: #e81123; color: #fff; }
+
+  Theming:
+    Light: bg #fff, text #333, border-bottom 1px solid #e0e0e0
+    Dark: bg #1e1e1e, text #ccc, border-bottom 1px solid #333
     <div id="window-controls" class="no-drag">
       <button id="btn-minimize" aria-label="Minimize">—</button>
       <button id="btn-maximize" aria-label="Maximize">□</button>
@@ -707,9 +736,11 @@ async function launchApp(fileArg) {
   "visual": {
     "blocks": [...],
     "titleBar": {
-      "text": "● notes.md — ~/Documents/",
+      "filename": "notes.md",
       "hasUnsavedDot": true,
-      "theme": "dark"
+      "state": "normal",
+      "theme": "dark",
+      "tooltipPath": "/Users/me/Documents/notes.md"
     },
     "notificationBar": {
       "visible": false,
@@ -734,6 +765,8 @@ async function launchApp(fileArg) {
 }
 ```
 
+`titleBar.state` values: `"normal"`, `"untitled"`, `"read-only"`, `"deleted"`, `"not-found"`
+
 ### Heuristic Checks (Electron-specific)
 
 | Check | Code | Severity |
@@ -757,3 +790,42 @@ For each gate:
   5. Regression check: run all existing tests
   6. Gate review → sign off → next gate
 ```
+
+---
+
+## Self-Critique & Improvements Applied
+
+### Critique of v1.0 Plan
+
+| Issue | What Was Wrong | How It's Fixed |
+|-------|---------------|----------------|
+| **Title bar showed file path** | Path clutter contradicts "minimal" design principle | Now: `[Icon] Filename` only — path via tooltip |
+| **G0 restructure is risky** | Moving all files to shared/ before Electron exists is premature | Decision: keep web code in place, Electron imports from current paths. Restructure only when both platforms are proven. |
+| **No dependency on shared editor verification** | G0 assumes shared modules work in Electron without testing the actual module loading | Added E-SETUP-02 that exercises the full editor pipeline |
+| **Gate 5 (Recent Files) has no eval tests** | Only "implementation tasks" — violates TDD protocol | Must add: E-RECENT-01..03 before implementation |
+| **Gate 8 (Title Bar States) has no eval tests** | Same problem | Must add: E-TITLE-01..06 covering all states |
+| **Gate 9 (Window Lifecycle) has no eval tests** | Same problem | Must add: E-LIFECYCLE-01..03 |
+| **Gate 10 (Accessibility) copies web gate** | "Same as Web Gate 6 plus" is lazy — needs own tests | Must specify E-A11Y-01..05 for title bar + notification bar |
+| **No performance gate** | Large files, focus mode sampling, auto-save timing not verified | Add performance checks: file save < 100ms, focus update < 16ms |
+| **No packaging gate** | electron-builder packaging not tested | Add Gate 12.5: package app, test installed version |
+| **macOS not addressed** | All wireframes show Windows conventions | Title bar: macOS uses traffic lights (handled by `titleBarStyle: 'hiddenInset'`). Close button red hover is Windows-only. |
+
+### Structural Improvements Applied
+
+1. **Title bar redesigned**: `[Icon | Filename] ---- [Min | Max | Close]` — minimal, clean
+2. **Path removed from title bar** — available via tooltip on filename
+3. **All gates now require eval tests** — no gate proceeds without them
+4. **Snapshot schema updated** — captures `titleBar.filename` and `titleBar.state` separately
+5. **macOS consideration noted** — traffic lights vs custom buttons documented
+6. **Performance criteria added** to Gate 12 exit criteria
+
+### Remaining Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Electron version compatibility | Pin Electron version, test on CI |
+| macOS code signing | Required for distribution, not needed for dev |
+| Windows SmartScreen | Unsigned app triggers warning — needs code signing for production |
+| Linux Wayland vs X11 | Custom title bar may behave differently — test both |
+| Large file performance | O(n) character sampling in focus mode — may need virtualization for 100KB+ files |
+

@@ -292,17 +292,18 @@ SC-E44: App idle for extended time
 
 ```
 SC-E45: Title bar — file with path
-  Shows: "filename.md — /parent/folder/"
-  Font: small, clean. Matches editor theme.
+  Shows: "[📝] filename.md" (icon + filename only, no path)
+  Full path available as tooltip on hover over filename.
+  Font: 13px system font, medium weight. Matches editor theme.
 
 SC-E46: Title bar — untitled file
-  Shows: "Untitled — Markdown Focus Editor"
+  Shows: "[📝] Untitled"
 
 SC-E47: Title bar — file deleted externally
   Shows: "filename.md (deleted)"
 
 SC-E48: Title bar — unsaved dot indicator
-  Shows: "● filename.md — /path/" (dot before filename)
+  Shows: "[📝] ● filename.md" (dot between icon and filename)
   Dot appears when content changed since last save.
   Disappears after successful save (usually within 500ms).
 
@@ -542,30 +543,69 @@ Error: settings corrupted → apply defaults, back up old file.
 ## 5. UI Design
 
 ### Custom Title Bar
+
+The title bar is minimal — just the app icon, filename, and window controls. No path clutter.
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  📝 ● notes.md — ~/Documents/project/          [—] [□] [×]     │
+│  [📝] notes.md                                  [—]  [□]  [×]  │
 └──────────────────────────────────────────────────────────────────┘
-     ↑                                              ↑  ↑  ↑
-  unsaved dot                                    min max close
-  (disappears after save)                        (red on hover)
+   ↑      ↑                                        ↑    ↑    ↑
+  icon  filename                                  min  max  close
 
-Light: #ffffff bg, #333 text, #e0e0e0 border-bottom
-Dark:  #2a2a2a bg, #e0e0e0 text, #444 border-bottom
-Height: 32px. Font: 12px system font.
-Drag region: entire bar except buttons.
-Double-click drag region: toggle maximize.
+Unsaved state:
+┌──────────────────────────────────────────────────────────────────┐
+│  [📝] ● notes.md                                [—]  [□]  [×]  │
+└──────────────────────────────────────────────────────────────────┘
+       ↑
+    unsaved dot (disappears after save)
+
+Untitled state:
+┌──────────────────────────────────────────────────────────────────┐
+│  [📝] Untitled                                  [—]  [□]  [×]  │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+**Layout**: 
+- Left: App icon (16×16 SVG) + filename (left-aligned, vertically centered)
+- Center: Empty (drag region)
+- Right: Minimize, Maximize/Restore, Close (right-aligned)
+
+**Sizing**:
+- Height: 32px
+- Icon: 16×16, 8px left margin
+- Filename: 8px left of icon, 13px system font, medium weight
+- Window controls: 46×32px each (Windows convention)
+
+**Theming**:
+- Light: `#ffffff` bg, `#333` text, `1px solid #e0e0e0` bottom border
+- Dark: `#1e1e1e` bg, `#cccccc` text, `1px solid #333` bottom border
+- Close hover: `#e81123` bg, `#fff` text (Windows red)
+- Min/Max hover: `rgba(0,0,0,0.1)` light / `rgba(255,255,255,0.1)` dark
+
+**Behavior**:
+- Entire bar except buttons is the drag region (`-webkit-app-region: drag`)
+- Double-click drag region: toggle maximize/restore
+- Buttons are `no-drag` (`-webkit-app-region: no-drag`)
+
+**Accessibility**:
+- All buttons: `tabindex="0"`, `aria-label="Minimize"` / `"Maximize"` / `"Close"`
+- Filename: `aria-live="polite"` (announces changes to screen readers)
+- Close button: `role="button"`, focus ring visible
 
 ### Title Bar States
 ```
-Normal:     "notes.md — ~/Documents/"
-Unsaved:    "● notes.md — ~/Documents/"
-Untitled:   "Untitled — Markdown Focus Editor"
-Read-only:  "notes.md (read-only) — ~/Documents/"
-Deleted:    "notes.md (deleted) — ~/Documents/"
-Not found:  "notes.md (file not found)"
+Normal:      [📝] notes.md
+Unsaved:     [📝] ● notes.md
+Untitled:    [📝] Untitled
+Read-only:   [📝] notes.md (read-only)
+Deleted:     [📝] notes.md (deleted)
+Not found:   [📝] notes.md (not found)
 ```
+
+The path is NOT shown in the title bar — it's minimal.
+Full path available via tooltip on hover over the filename.
+Or via a future "Reveal in Explorer/Finder" context menu.
 
 ### External Change Notification Bar
 ```

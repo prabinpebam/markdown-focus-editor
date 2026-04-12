@@ -514,3 +514,39 @@ For each gate:
 | G7 Storage Quota | Bar accuracy, import guard | Needs work |
 | G8 Cross-Tab | Document limitation | Document only |
 | G9 Integration | Full regression | Final |
+
+---
+
+## Self-Critique & Improvements Applied
+
+### Critique of v1.0 Plan
+
+| Issue | What Was Wrong | How It's Fixed |
+|-------|---------------|----------------|
+| **G3 Download: .md content quality not verified** | Plan didn't specify what "clean markdown" means | Added: no ZWSP, no HTML tags, no marker spans, valid CommonMark |
+| **G4 Import: only 3 tests for complex feature** | Import has 13 scenarios in spec but only 3 eval tests | Must expand: test each import error mode individually |
+| **G5 Error: localStorage unavailable test is fragile** | Overriding Object.defineProperty for localStorage is brittle | Alternative: test in incognito/private browsing mode, or mock at module level |
+| **G6 A11Y: no WCAG compliance level stated** | "Accessible" is vague without a target | Target: WCAG 2.1 AA for all interactive elements |
+| **G7 Quota: 5MB assumption is wrong for some browsers** | Firefox allows 10MB, Safari 5MB, Chrome 5MB | Document per-browser limits. Test actual quota by writing until error. |
+| **G8 Cross-Tab: completely punted** | "Document only" isn't a gate — it's avoidance | Minimum: add a test proving two tabs don't crash. Document limitation in UI. |
+| **No performance gate** | Download large doc, import large backup — timing not measured | Add: download < 500ms, import < 2s, auto-save < 50ms |
+| **No visual regression gate** | Screenshots taken but never compared | Future: add pixel-diff comparison for modal, toolbar, notifications |
+| **Existing 132 tests treated as given** | No mention of updating them if specs change | Rule: spec change → update eval test → re-verify |
+
+### Structural Improvements Applied
+
+1. **Every gate must have eval tests** — no "document only" gates pass without verification
+2. **Performance criteria added** to Gate 9 exit criteria
+3. **WCAG 2.1 AA** stated as accessibility target
+4. **Import test matrix expanded** — each error scenario gets its own test
+5. **Download content validated** against CommonMark spec (not just "no ZWSPs")
+
+### Remaining Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Safari localStorage behavior differs from Chrome | Test in Safari WebKit via Playwright (webkit project) |
+| Private/incognito mode has no localStorage | Detect and notify user — editor still usable for one session |
+| Very old backups (pre-schemaVersion) imported | Migration function handles version 0 → 1 |
+| Browser extensions interfere with contenteditable | No mitigation — document as known limitation |
+| Aggressive browser garbage collection clears localStorage | No mitigation except export backup frequently |
