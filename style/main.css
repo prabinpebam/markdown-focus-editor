@@ -132,9 +132,9 @@ body.dark-theme #btn-close:hover {
     color: #fff;
 }
 
-/* When title bar is visible, push body content down */
+/* When title bar is visible, content extends full window — title bar overlays on top */
 body.has-title-bar {
-    padding-top: 52px; /* 32px title bar + 20px original padding */
+    padding-top: 20px; /* Same as base — no extra push */
 }
 
 /* Push toolbar down when title bar is visible */
@@ -142,13 +142,22 @@ body.has-title-bar #toolbar {
     top: 72px; /* 32px title bar + 40px original top */
 }
 
+/* Editor wrapper needs top margin so first line isn't hidden behind title bar */
+body.has-title-bar .editor-wrapper {
+    margin-top: 72px; /* 32px title bar + 40px original margin */
+}
+
 /* When notification bar is also visible, add more offset */
 body.has-notification-bar {
-    padding-top: 84px; /* 32px title + 32px notification + 20px padding */
+    padding-top: 20px;
 }
 
 body.has-notification-bar #toolbar {
     top: 104px; /* 32px title + 32px notification + 40px */
+}
+
+body.has-notification-bar .editor-wrapper {
+    margin-top: 104px;
 }
 
 /* ── Notification Bar ── */
