@@ -22,6 +22,7 @@
 
 import markdownConverter from './markdownConverter.js';
 import sanitizer from './sanitizer.js';
+import codeBlockManager from './codeBlockManager.js';
 
 const clipboardManager = {
     editor: null,
@@ -285,6 +286,8 @@ const clipboardManager = {
                 if (this.editor.focusMode) {
                     this.editor.focusMode.updateFocusIfActive();
                 }
+                // Highlight any pasted code blocks
+                codeBlockManager.highlightAll();
             }, 10);
         }
     },

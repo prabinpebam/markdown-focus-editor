@@ -646,7 +646,8 @@ const editor = {
             // Skip all markdown transformations inside code blocks
             const activeCodeBlock = codeBlockManager.getActiveCodeBlock();
             if (activeCodeBlock) {
-                // Inside code block — no markdown transformations, just record input
+                // Inside code block — no markdown transformations, trigger re-highlight
+                codeBlockManager.handleInput(activeCodeBlock);
                 if (this.undoManager) {
                     this.undoManager.handleCustomChange('codeBlockInput');
                 }

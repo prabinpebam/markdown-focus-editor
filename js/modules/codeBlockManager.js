@@ -6,8 +6,11 @@
  * Tab inserts 2 spaces. Escape exits the code block.
  */
 
+import syntaxHighlighter from './syntaxHighlighter.js';
+
 const codeBlockManager = {
     editor: null,
+    _highlightTimer: null,
 
     // Matches ``` with optional language identifier
     codeBlockRegex: /^```(\w*)$/,
@@ -75,6 +78,9 @@ const codeBlockManager = {
             rng.collapse(true);
             sel.removeAllRanges();
             sel.addRange(rng);
+
+            // Initial highlight (will be a no-op for empty block)
+            this._scheduleHighlight(codeBlock);
         }
 
         if (this.editor.undoManager) {
@@ -198,8 +204,21 @@ const codeBlockManager = {
      * @param {Element} codeBlock
      */
     handleInput(codeBlock) {
-        // Will be connected to syntaxHighlighter in Gate 3
-        // For now, no-op
+        this._scheduleHighlight(codeBlock);
+    },
+
+    /**
+     * Schedule a debounced re-highlight for a code block (300ms).
+     */
+    _scheduleHighlight(codeBlock) {
+        clearTimeout(this._highlightTimer);
+        this._highlightTimer = setTimeout(() => {
+            const code = codeBlock.querySelector('code');
+            const language = codeBlock.getAttribute('data-language') || 'plaintext';
+            if (code) {
+                syntaxHighlighter.highlight(code, language);
+            }
+        }, 300);
     },
 
     /**
@@ -303,6 +322,21 @@ const codeBlockManager = {
             newRange.collapse(true);
             sel.removeAllRanges();
             sel.addRange(newRange);
+        }
+    },
+
+    /**
+     * Highlight all code blocks in the editor (e.g. after paste or load).
+     */
+    highlightAll() {
+        if (!this.editor || !this.editor.editorEl) return;
+        const blocks = this.editor.editorEl.querySelectorAll('.code-block');
+        for (const block of blocks) {
+            const code = block.querySelector('code');
+            const language = block.getAttribute('data-language') || 'plaintext';
+            if (code && code.textContent.trim()) {
+                syntaxHighlighter.highlight(code, language);
+            }
         }
     },
 };

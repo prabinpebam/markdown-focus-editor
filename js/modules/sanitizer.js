@@ -11,10 +11,14 @@ const ALLOWED_TAGS = new Set([
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     'ul', 'ol', 'li',
     'b', 'strong', 'i', 'em', 's',
+    'blockquote',
+    'pre', 'code',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
 ]);
 
 const ALLOWED_ATTRS = new Set([
-    'class', 'contenteditable',
+    'class', 'contenteditable', 'data-language', 'data-align',
+    'spellcheck', 'style',
 ]);
 
 /**
