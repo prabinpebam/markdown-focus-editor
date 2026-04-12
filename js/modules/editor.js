@@ -1,6 +1,9 @@
 import storage from './storage.js';
 import listManager from './listManager.js';
 import headingManager from './headingManager.js';
+import blockquoteManager from './blockquoteManager.js';
+import codeBlockManager from './codeBlockManager.js';
+import tableManager from './tableManager.js';
 
 // undoManager is assigned by app.js
 // inlineStyleManager is assigned by app.js
@@ -102,10 +105,51 @@ const editor = {
 
         listManager.init(this);
         headingManager.init(this);
+        blockquoteManager.init(this);
+        codeBlockManager.init(this);
+        tableManager.init(this);
         // inlineStyleManager is initialized in app.js and assigned to this.inlineStyleManager
+
+        // Table cell click delegation
+        this.editorEl.addEventListener('click', (e) => {
+            const tableBlock = e.target.closest('.table-block');
+            if (tableBlock) {
+                tableManager.handleClick(e, tableBlock);
+            }
+        });
     },
 
     handleKeyDown(e) {
+        // ── Code block, table, blockquote intercept (before other handlers) ──
+        const activeCodeBlock = codeBlockManager.getActiveCodeBlock();
+        if (activeCodeBlock) {
+            // Inside code block — handle all keys, suppress markdown triggers
+            if (codeBlockManager.handleKeyDown(e, activeCodeBlock)) return;
+            // If not handled (regular typing), let browser handle but skip transformations
+            if (!e.ctrlKey && !e.metaKey && e.key !== 'Backspace') return;
+        }
+
+        const activeTable = tableManager.getActiveTable();
+        if (activeTable) {
+            if (tableManager.handleKeyDown(e, activeTable)) return;
+            // Tab/Enter handled above; other keys (typing) fall through for cell editing
+            if (!e.ctrlKey && !e.metaKey) return;
+        }
+
+        // Blockquote Enter/Backspace handling
+        if (e.key === 'Enter' || e.key === 'Backspace') {
+            const sel = window.getSelection();
+            if (sel && sel.anchorNode) {
+                const bq = sel.anchorNode.closest ? sel.anchorNode.closest('blockquote') : null;
+                const bqParent = sel.anchorNode.parentNode?.closest ? sel.anchorNode.parentNode.closest('blockquote') : null;
+                const blockquote = bq || bqParent;
+                if (blockquote && this.editorEl.contains(blockquote)) {
+                    if (e.key === 'Enter' && blockquoteManager.handleEnter(e, blockquote)) return;
+                    if (e.key === 'Backspace' && blockquoteManager.handleBackspace(e, blockquote)) return;
+                }
+            }
+        }
+
         // Undo/Redo handling
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
@@ -598,6 +642,19 @@ const editor = {
             }
 
             let transformationOccurred = false;
+
+            // Skip all markdown transformations inside code blocks
+            const activeCodeBlock = codeBlockManager.getActiveCodeBlock();
+            if (activeCodeBlock) {
+                // Inside code block — no markdown transformations, just record input
+                if (this.undoManager) {
+                    this.undoManager.handleCustomChange('codeBlockInput');
+                }
+                this.applyFocusAndSave(absCaretPosBeforeTransform, false);
+                this.preDomSnapshot = null;
+                this.lastLogTrigger = null;
+                return;
+            }
             
             if (blockToProcess && blockToProcess.parentNode === this.editorEl) {
                 console.log('[CURSOR-LOG] Editor.handleInputFormatting - ATTEMPTING block transformation on:', blockToProcess.tagName, 'with content:', JSON.stringify(blockToProcess.textContent));
@@ -699,8 +756,22 @@ const editor = {
         const olMatch = textContent.match(listManager.olMarkerRegex);
         if (olMatch) {
             console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - OL match found, converting to list');
-            // listManager.convertBlockToList should call undoManager if successful
             return listManager.convertBlockToList(blockNode, olMatch, 'ol');
+        }
+
+        // Try blockquote transformation
+        if (blockquoteManager.tryTransformToBlockquote(blockNode, textContent)) {
+            return true;
+        }
+
+        // Try code block transformation
+        if (codeBlockManager.tryTransformToCodeBlock(blockNode, textContent)) {
+            return true;
+        }
+
+        // Try table transformation (checks previous sibling for header row)
+        if (tableManager.tryTransformToTable(blockNode, textContent)) {
+            return true;
         }
         
         console.log('[CURSOR-LOG] Editor.attemptBlockTransformations - NO transformation applied');

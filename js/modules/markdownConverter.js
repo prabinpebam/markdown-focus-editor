@@ -29,10 +29,74 @@ const markdownConverter = {
         let listType = null;
         let listItems = [];
         let listIndentLevel = 0;
+
+        // Track if we're in a fenced code block
+        let inCodeBlock = false;
+        let codeBlockLang = '';
+        let codeBlockLines = [];
+
+        // Track if we're collecting blockquote lines
+        let inBlockquote = false;
+        let blockquoteLines = [];
         
         // Process each line
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
+
+            // ── Fenced code block handling ──
+            if (line.trim().startsWith('```')) {
+                if (!inCodeBlock) {
+                    // Opening fence
+                    if (inList) {
+                        processedLines.push(this._constructList(listItems, listType));
+                        inList = false; listItems = [];
+                    }
+                    if (inBlockquote) {
+                        processedLines.push(this._constructBlockquote(blockquoteLines));
+                        inBlockquote = false; blockquoteLines = [];
+                    }
+                    inCodeBlock = true;
+                    codeBlockLang = line.trim().substring(3).trim() || 'plaintext';
+                    codeBlockLines = [];
+                    continue;
+                } else {
+                    // Closing fence
+                    inCodeBlock = false;
+                    const escapedCode = codeBlockLines.join('\n')
+                        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    processedLines.push(
+                        `<div class="code-block" data-language="${codeBlockLang}" contenteditable="false">` +
+                        `<div class="code-block-header" contenteditable="false"><span class="code-language">${codeBlockLang}</span></div>` +
+                        `<pre class="code-block-content" contenteditable="true" spellcheck="false"><code class="language-${codeBlockLang}">${escapedCode}\n</code></pre>` +
+                        `</div>`
+                    );
+                    continue;
+                }
+            }
+
+            if (inCodeBlock) {
+                codeBlockLines.push(line);
+                continue;
+            }
+
+            // ── Blockquote handling ──
+            const quoteMatch = line.match(/^(>{1,5})\s(.*)$/);
+            if (quoteMatch) {
+                if (inList) {
+                    processedLines.push(this._constructList(listItems, listType));
+                    inList = false; listItems = [];
+                }
+                if (!inBlockquote) inBlockquote = true;
+                blockquoteLines.push({ depth: quoteMatch[1].length, text: quoteMatch[2] });
+                continue;
+            }
+
+            // Close blockquote if we were in one
+            if (inBlockquote) {
+                processedLines.push(this._constructBlockquote(blockquoteLines));
+                inBlockquote = false;
+                blockquoteLines = [];
+            }
             
             // Heading - convert to editor format with span marker
             const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
@@ -100,6 +164,22 @@ const markdownConverter = {
                 inList = false;
                 listItems = [];
             }
+
+            // ── Table detection ──
+            // Check if this line + next line form a table header + separator
+            const tableHeaderMatch = /^\|(.+\|)+\s*$/.test(line);
+            if (tableHeaderMatch && i + 1 < lines.length && /^\|(\s*:?-+:?\s*\|)+\s*$/.test(lines[i + 1])) {
+                // Collect all table lines
+                const tableLines = [line, lines[i + 1]];
+                let j = i + 2;
+                while (j < lines.length && /^\|(.+\|)+\s*$/.test(lines[j])) {
+                    tableLines.push(lines[j]);
+                    j++;
+                }
+                processedLines.push(this._constructTableFromMarkdown(tableLines));
+                i = j - 1; // Skip processed lines
+                continue;
+            }
             
             // Process inline styles for non-list, non-heading lines
             if (line.trim() !== '') {
@@ -121,10 +201,114 @@ const markdownConverter = {
         if (inList) {
             processedLines.push(this._constructList(listItems, listType));
         }
+
+        // Close any open blockquote
+        if (inBlockquote) {
+            processedLines.push(this._constructBlockquote(blockquoteLines));
+        }
+
+        // Close any unclosed code block
+        if (inCodeBlock) {
+            const escapedCode = codeBlockLines.join('\n')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            processedLines.push(
+                `<div class="code-block" data-language="${codeBlockLang}" contenteditable="false">` +
+                `<div class="code-block-header" contenteditable="false"><span class="code-language">${codeBlockLang}</span></div>` +
+                `<pre class="code-block-content" contenteditable="true" spellcheck="false"><code class="language-${codeBlockLang}">${escapedCode}\n</code></pre>` +
+                `</div>`
+            );
+        }
         
         return processedLines.join('');
     },
+
+    /**
+     * Construct a blockquote from collected lines.
+     * @param {Array} lines - Array of {depth, text}
+     * @returns {string} - HTML string
+     */
+    _constructBlockquote(lines) {
+        if (lines.length === 0) return '';
+
+        let html = '<blockquote>';
+        let currentDepth = 1;
+
+        for (const line of lines) {
+            // Open nested blockquotes as needed
+            while (currentDepth < line.depth) {
+                html += '<blockquote>';
+                currentDepth++;
+            }
+            // Close nested blockquotes as needed
+            while (currentDepth > line.depth) {
+                html += '</blockquote>';
+                currentDepth--;
+            }
+
+            // Process inline styles in the line
+            let processed = line.text.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+            processed = processed.replace(/\*([^*]+)\*/g, '<i>$1</i>');
+            processed = processed.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+
+            html += `<div>${processed || '<br>'}</div>`;
+        }
+
+        // Close all remaining open blockquotes
+        while (currentDepth > 0) {
+            html += '</blockquote>';
+            currentDepth--;
+        }
+
+        return html;
+    },
     
+    /**
+     * Construct a table from markdown lines.
+     * @param {string[]} tableLines - Array of pipe-separated lines [header, separator, ...data]
+     * @returns {string} HTML table-block string
+     */
+    _constructTableFromMarkdown(tableLines) {
+        if (tableLines.length < 2) return '';
+
+        const parseCells = line => line.split('|').map(s => s.trim()).filter(s => s.length > 0);
+
+        const headers = parseCells(tableLines[0]);
+        const sepCells = parseCells(tableLines[1]);
+
+        // Parse alignments
+        const alignments = sepCells.map(cell => {
+            const left = cell.startsWith(':');
+            const right = cell.endsWith(':');
+            if (left && right) return 'center';
+            if (right) return 'right';
+            return 'left';
+        });
+
+        // Build header HTML
+        let html = '<div class="table-block"><table><thead><tr>';
+        headers.forEach((h, i) => {
+            const align = alignments[i] || 'left';
+            const escaped = h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<th data-align="${align}" style="text-align:${align}">${escaped}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        // Build data rows
+        for (let r = 2; r < tableLines.length; r++) {
+            const cells = parseCells(tableLines[r]);
+            html += '<tr>';
+            headers.forEach((_, i) => {
+                const text = (cells[i] || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const align = alignments[i] || 'left';
+                html += `<td style="text-align:${align}">${text || '<br>'}</td>`;
+            });
+            html += '</tr>';
+        }
+
+        html += '</tbody></table></div>';
+        return html;
+    },
+
     /**
      * Helper function to construct nested lists with proper indentation
      * @param {Array} items - List of items with content and level
@@ -317,6 +501,23 @@ const markdownConverter = {
                 // Handle list elements
                 else if (tagName === 'ul' || tagName === 'ol') {
                     markdown.push(this._processEditorList(node));
+                }
+                // Handle blockquote elements
+                else if (tagName === 'blockquote') {
+                    markdown.push(this._processEditorBlockquote(node, 1));
+                }
+                // Handle code block elements
+                else if (node.classList && node.classList.contains('code-block')) {
+                    const lang = node.getAttribute('data-language') || 'plaintext';
+                    const code = node.querySelector('code');
+                    let codeText = code ? code.textContent : '';
+                    // Remove trailing newline that we add for display
+                    if (codeText.endsWith('\n')) codeText = codeText.slice(0, -1);
+                    markdown.push('```' + lang + '\n' + codeText + '\n```');
+                }
+                // Handle table elements
+                else if (node.classList && node.classList.contains('table-block')) {
+                    markdown.push(this._processEditorTable(node));
                 }
                 // Handle normal divs and paragraphs
                 else if (tagName === 'div' || tagName === 'p') {
@@ -560,6 +761,107 @@ const markdownConverter = {
         }
         
         return processedContent;
+    },
+
+    /**
+     * Convert an editor blockquote element to markdown.
+     * @param {Element} blockquote - The <blockquote> element
+     * @param {number} depth - Current nesting depth (1 = top level)
+     * @returns {string} Markdown with > prefixes
+     */
+    _processEditorBlockquote(blockquote, depth) {
+        const prefix = '>'.repeat(depth) + ' ';
+        const lines = [];
+
+        for (const child of blockquote.childNodes) {
+            if (child.nodeType === Node.ELEMENT_NODE) {
+                if (child.tagName === 'BLOCKQUOTE') {
+                    // Nested blockquote
+                    lines.push(this._processEditorBlockquote(child, depth + 1));
+                } else if (child.tagName === 'DIV' || child.tagName === 'P') {
+                    const content = this._processEditorInlineContent(child);
+                    lines.push(prefix + (content.trim() || ''));
+                } else {
+                    const content = this._processEditorInlineContent(child);
+                    if (content.trim()) lines.push(prefix + content.trim());
+                }
+            } else if (child.nodeType === Node.TEXT_NODE && child.textContent.trim()) {
+                lines.push(prefix + child.textContent.trim());
+            }
+        }
+
+        return lines.join('\n');
+    },
+
+    /**
+     * Convert an editor table block to GFM markdown table.
+     * @param {Element} tableBlock - The .table-block element
+     * @returns {string} Markdown table
+     */
+    _processEditorTable(tableBlock) {
+        const table = tableBlock.querySelector('table');
+        if (!table) return '';
+
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+
+        // Extract header cells
+        const headers = [];
+        const alignments = [];
+        if (thead) {
+            const headerRow = thead.querySelector('tr');
+            if (headerRow) {
+                for (const th of headerRow.children) {
+                    headers.push(th.textContent.trim() || '');
+                    alignments.push(th.getAttribute('data-align') || th.style.textAlign || 'left');
+                }
+            }
+        }
+
+        if (headers.length === 0) return '';
+
+        // Extract body rows
+        const bodyRows = [];
+        if (tbody) {
+            for (const tr of tbody.querySelectorAll('tr')) {
+                const cells = [];
+                for (const td of tr.children) {
+                    cells.push(td.textContent.trim() || '');
+                }
+                bodyRows.push(cells);
+            }
+        }
+
+        // Calculate column widths for neat output
+        const colWidths = headers.map((h, i) => {
+            let maxW = h.length;
+            for (const row of bodyRows) {
+                if (row[i]) maxW = Math.max(maxW, row[i].length);
+            }
+            return Math.max(maxW, 3); // Minimum 3 for ---
+        });
+
+        // Build header row
+        const headerLine = '| ' + headers.map((h, i) => h.padEnd(colWidths[i])).join(' | ') + ' |';
+
+        // Build separator row with alignment
+        const sepLine = '| ' + alignments.map((a, i) => {
+            const w = colWidths[i];
+            if (a === 'center') return ':' + '-'.repeat(w - 2) + ':';
+            if (a === 'right') return '-'.repeat(w - 1) + ':';
+            return '-'.repeat(w);
+        }).join(' | ') + ' |';
+
+        // Build data rows
+        const dataLines = bodyRows.map(row => {
+            const cells = headers.map((_, i) => {
+                const cell = row[i] || '';
+                return cell.padEnd(colWidths[i]);
+            });
+            return '| ' + cells.join(' | ') + ' |';
+        });
+
+        return [headerLine, sepLine, ...dataLines].join('\n');
     },
 };
 
