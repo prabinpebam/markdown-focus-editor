@@ -195,8 +195,11 @@ const markdownConverter = {
                 let processedLine = this._processInlineMarkdown(line);
                 processedLines.push(`<div>${processedLine}</div>`);
             } else if (line.trim() === '' && !inList) {
-                // Empty line not in a list
-                processedLines.push('<div><br></div>');
+                // Empty line not in a list — collapse consecutive blank lines
+                const lastLine = processedLines[processedLines.length - 1];
+                if (lastLine !== '<div><br></div>') {
+                    processedLines.push('<div><br></div>');
+                }
             }
         }
         
@@ -540,7 +543,8 @@ const markdownConverter = {
         tempDiv.innerHTML = editorHtml;
         
         // Process each block-level element
-        const markdown = [];
+        // Each entry is { text, isEmpty } to enable proper blank line handling
+        const blocks = [];
         
         for (const node of tempDiv.childNodes) {
             if (node.nodeType === Node.ELEMENT_NODE) {
@@ -561,19 +565,19 @@ const markdownConverter = {
                     headingText = headingText.replace(/\u200B/g, '');
                     
                     // Create the markdown heading
-                    markdown.push(`${'#'.repeat(level)} ${headingText.trim()}`);
+                    blocks.push({ text: `${'#'.repeat(level)} ${headingText.trim()}`, isEmpty: false });
                 }
                 // Handle list elements
                 else if (tagName === 'ul' || tagName === 'ol') {
-                    markdown.push(this._processEditorList(node));
+                    blocks.push({ text: this._processEditorList(node), isEmpty: false });
                 }
                 // Handle horizontal rule
                 else if (tagName === 'hr') {
-                    markdown.push('---');
+                    blocks.push({ text: '---', isEmpty: false });
                 }
                 // Handle blockquote elements
                 else if (tagName === 'blockquote') {
-                    markdown.push(this._processEditorBlockquote(node, 1));
+                    blocks.push({ text: this._processEditorBlockquote(node, 1), isEmpty: false });
                 }
                 // Handle code block elements
                 else if (node.classList && node.classList.contains('code-block')) {
@@ -582,11 +586,11 @@ const markdownConverter = {
                     let codeText = code ? code.textContent : '';
                     // Remove trailing newline that we add for display
                     if (codeText.endsWith('\n')) codeText = codeText.slice(0, -1);
-                    markdown.push('```' + lang + '\n' + codeText + '\n```');
+                    blocks.push({ text: '```' + lang + '\n' + codeText + '\n```', isEmpty: false });
                 }
                 // Handle table elements
                 else if (node.classList && node.classList.contains('table-block')) {
-                    markdown.push(this._processEditorTable(node));
+                    blocks.push({ text: this._processEditorTable(node), isEmpty: false });
                 }
                 // Handle normal divs and paragraphs
                 else if (tagName === 'div' || tagName === 'p') {
@@ -594,19 +598,32 @@ const markdownConverter = {
                     
                     // Only add if there's actual content (not just a <br>)
                     if (content.trim() !== '') {
-                        markdown.push(content);
+                        blocks.push({ text: content, isEmpty: false });
                     } else if (node.querySelector('br')) {
-                        markdown.push(''); // Empty line
+                        blocks.push({ text: '', isEmpty: true });
                     }
                 }
                 else {
                     // Any other element, try to extract inline content
-                    markdown.push(this._processEditorInlineContent(node));
+                    blocks.push({ text: this._processEditorInlineContent(node), isEmpty: false });
                 }
             }
         }
         
-        return markdown.join('\n\n');
+        // Build markdown: skip empty blocks entirely.
+        // join('\n\n') between content blocks provides the paragraph separator,
+        // which maps to exactly one <div><br></div> on re-open.
+        const lines = [];
+        for (let i = 0; i < blocks.length; i++) {
+            if (!blocks[i].isEmpty) {
+                lines.push(blocks[i].text);
+            }
+        }
+        // Trim trailing empty lines
+        while (lines.length > 0 && lines[lines.length - 1] === '') {
+            lines.pop();
+        }
+        return lines.join('\n\n');
     },
     
     /**
