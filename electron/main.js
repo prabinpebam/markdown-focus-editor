@@ -130,28 +130,32 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+  });
 
-    // Open file from command line argument
-    const fileArg = process.argv.find(a => a.endsWith('.md') || a.endsWith('.txt') || a.endsWith('.markdown'));
-    if (fileArg && fs.existsSync(fileArg)) {
-      openFile(path.resolve(fileArg));
-    } else if (settings.lastFilePath) {
-      if (fs.existsSync(settings.lastFilePath)) {
-        openFile(settings.lastFilePath);
+  // Open file after renderer is fully loaded (all ES modules initialized)
+  mainWindow.webContents.once('did-finish-load', () => {
+    // Small delay to ensure DOMContentLoaded + module init is complete
+    setTimeout(() => {
+      const fileArg = process.argv.find(a => a.endsWith('.md') || a.endsWith('.txt') || a.endsWith('.markdown'));
+      if (fileArg && fs.existsSync(fileArg)) {
+        openFile(path.resolve(fileArg));
+      } else if (settings.lastFilePath) {
+        if (fs.existsSync(settings.lastFilePath)) {
+          openFile(settings.lastFilePath);
+        } else {
+          updateTitleBar('Untitled', 'untitled');
+          mainWindow.webContents.send('file-error', {
+            action: 'open',
+            code: 'NOT_FOUND',
+            message: `Previous file not found: ${path.basename(settings.lastFilePath)}`,
+          });
+          settings.lastFilePath = null;
+          saveSettings(settings);
+        }
       } else {
-        // Last file no longer exists — notify user
         updateTitleBar('Untitled', 'untitled');
-        mainWindow.webContents.send('file-error', {
-          action: 'open',
-          code: 'NOT_FOUND',
-          message: `Previous file not found: ${path.basename(settings.lastFilePath)}`,
-        });
-        settings.lastFilePath = null;
-        saveSettings(settings);
       }
-    } else {
-      updateTitleBar('Untitled', 'untitled');
-    }
+    }, 200);
   });
 
   // Save window state on close
