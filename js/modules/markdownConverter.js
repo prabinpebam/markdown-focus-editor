@@ -132,7 +132,12 @@ const markdownConverter = {
                 const markerType = ulMatch[2];
                 const itemContent = ulMatch[3];
                 
-                // If we're starting a new list or switching list type
+                // If indented, treat as nested within current list (even if type differs)
+                if (inList && indentLevel > 0) {
+                    listItems.push({ content: itemContent, level: indentLevel, marker: '-' });
+                    continue;
+                }
+                // Starting a new top-level list or switching list type at level 0
                 if (!inList || listType !== 'ul') {
                     if (inList) {
                         processedLines.push(this._constructList(listItems, listType));
@@ -153,7 +158,12 @@ const markdownConverter = {
                 const marker = olMatch[2];
                 const itemContent = olMatch[3];
                 
-                // If we're starting a new list or switching list type
+                // If indented, treat as nested within current list (even if type differs)
+                if (inList && indentLevel > 0) {
+                    listItems.push({ content: itemContent, level: indentLevel, marker: marker });
+                    continue;
+                }
+                // Starting a new top-level list or switching list type at level 0
                 if (!inList || listType !== 'ol') {
                     if (inList) {
                         processedLines.push(this._constructList(listItems, listType));
@@ -401,7 +411,10 @@ const markdownConverter = {
             if (item.level > currentLevel) {
                 const diff = item.level - currentLevel;
                 for (let i = 0; i < diff; i++) {
-                    const newList = document.createElement(listType);
+                    // Determine sublist type: use item marker if available, otherwise parent type
+                    const subType = (item.marker && /^[-*+]$/.test(item.marker)) ? 'ul' : 
+                                   (item.marker && /^\d+\.$/.test(item.marker)) ? 'ol' : listType;
+                    const newList = document.createElement(subType);
                     // Get the last list item in the current list
                     const lastLi = currentList.lastChild;
                     if (lastLi) {
