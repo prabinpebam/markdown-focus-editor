@@ -122,9 +122,12 @@ const editor = {
         const wrapper = document.querySelector('.editor-wrapper');
         if (wrapper) {
             wrapper.addEventListener('click', (e) => {
-                // Only handle clicks directly on the wrapper, not bubbled from editor/toolbar
-                if (e.target === wrapper || e.target === this.editorEl) return;
+                // Don't interfere with clicks inside the editor or on UI elements
                 if (this.editorEl.contains(e.target)) return;
+                if (e.target.closest('#toolbar')) return;
+                if (e.target.closest('button')) return;
+                if (e.target.closest('label')) return;
+                if (e.target.closest('input')) return;
                 this.editorEl.focus();
                 // Place caret at the end of the editor
                 const sel = window.getSelection();
@@ -132,6 +135,23 @@ const editor = {
                 sel.collapseToEnd();
             });
         }
+
+        // Click anywhere on body outside editor/toolbar focuses editor
+        document.body.addEventListener('click', (e) => {
+            if (this.editorEl.contains(e.target)) return;
+            if (e.target.closest('#toolbar')) return;
+            if (e.target.closest('.modal-overlay')) return;
+            if (e.target.closest('.document-modal')) return;
+            if (e.target.closest('#title-bar')) return;
+            if (e.target.closest('#notification-bar')) return;
+            if (e.target.closest('button')) return;
+            if (e.target.closest('label')) return;
+            if (e.target.closest('input')) return;
+            this.editorEl.focus();
+            const sel = window.getSelection();
+            sel.selectAllChildren(this.editorEl);
+            sel.collapseToEnd();
+        });
     },
 
     handleKeyDown(e) {

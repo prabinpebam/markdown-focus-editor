@@ -37,6 +37,7 @@ body {
     overflow-y: auto; /* Body handles scrolling */
     padding: 20px;
     font-size: var(--base-font);       /* body inherits variable             */
+    cursor: text;
 }
 
 /* ── Custom Title Bar (Electron) ── */
