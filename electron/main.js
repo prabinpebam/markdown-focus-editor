@@ -237,6 +237,9 @@ function saveFile(filePath, content) {
       // File doesn't exist yet — that's fine, we'll create it
     }
 
+    // Pause file watcher during save to prevent false "external change" alerts
+    stopFileWatcher();
+
     // Atomic write: write to temp, then rename
     const tempPath = filePath + '.tmp';
     fs.writeFileSync(tempPath, content, 'utf8');
@@ -248,6 +251,10 @@ function saveFile(filePath, content) {
       name: path.basename(filePath),
     });
     console.log(`[Main] Saved: ${filePath} (${content.length} chars)`);
+
+    // Restart watcher after a brief delay to let filesystem events settle
+    setTimeout(() => startFileWatcher(filePath), 500);
+
     return true;
   } catch (e) {
     let userMessage = `Save failed: ${e.message}`;
@@ -275,6 +282,7 @@ function saveFile(filePath, content) {
     if (code !== 'READONLY' && code !== 'DISK_FULL') {
       setTimeout(() => {
         try {
+          stopFileWatcher();
           fs.writeFileSync(filePath, content, 'utf8');
           lastSaveTime = Date.now();
           updateTitleBar(path.basename(filePath), 'normal');
@@ -283,8 +291,10 @@ function saveFile(filePath, content) {
             name: path.basename(filePath),
           });
           console.log(`[Main] Retry save succeeded: ${filePath}`);
+          setTimeout(() => startFileWatcher(filePath), 500);
         } catch (retryErr) {
           console.error(`[Main] Retry save also failed:`, retryErr.message);
+          startFileWatcher(filePath);
         }
       }, 2000);
     }
@@ -305,8 +315,8 @@ function startFileWatcher(filePath) {
   stopFileWatcher();
   try {
     fileWatcher = fs.watch(filePath, (eventType) => {
-      // Debounce: ignore changes within 1s of our own save
-      if (Date.now() - lastSaveTime < 1000) return;
+      // Debounce: ignore changes within 2s of our own save
+      if (Date.now() - lastSaveTime < 2000) return;
 
       // Check if file still exists
       if (!fs.existsSync(filePath)) {
