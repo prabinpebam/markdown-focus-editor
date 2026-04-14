@@ -34,16 +34,24 @@
       ],
       "icon": "build/icon.ico"
     },
+    "electronLanguages": ["en-US"],
     "files": [
       "electron/**/*",
       "js/**/*",
       "style/**/*",
       "images/**/*",
       "index.html",
-      "build/icon.ico"
+      "build/icon.ico",
+      "!**/eval-loop",
+      "!**/test-results",
+      "!**/*.spec.js"
     ],
     "extraResources": [],
-    "asar": false
+    "asar": true,
+    "asarUnpack": [
+      "style/fonts/**"
+    ],
+    "removePackageScripts": true
   },
   "keywords": [],
   "devDependencies": {
