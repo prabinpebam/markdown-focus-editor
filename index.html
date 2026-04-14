@@ -53,7 +53,16 @@
   
   <!-- New Toolbar Activator - #toolbar itself will morph -->
   <div id="toolbar">
-    <div id="toolbar-activator-dot"></div>
+    <div id="toolbar-activator-dot">
+      <svg class="save-progress-ring" viewBox="0 0 36 36">
+        <circle class="save-progress-track" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"/>
+        <circle class="save-progress-bar" cx="18" cy="18" r="15.5" fill="none" stroke-width="3"
+                stroke-dasharray="97.4" stroke-dashoffset="97.4" stroke-linecap="round"
+                transform="rotate(-90 18 18)"/>
+        <polyline class="save-checkmark" points="11,18 16,23 25,13" fill="none" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
     <!-- Toolbar Buttons: -->
     <button id="new-document" title="New Document (Ctrl+N)"><img src="images/new-document.svg" alt="New Document"></button>
     <button id="open-file" title="Open Document (Ctrl+O)"><img src="images/open-document.svg" alt="Open Document"></button>
@@ -64,7 +73,7 @@
     <button id="fullscreen" title="Toggle Fullscreen"><img src="images/fullscreen.svg" alt="Fullscreen"></button>    
     <span class="separator"></span>
     <label class="switch" title="Focus">
-        <input type="checkbox" id="focus-toggle" checked>
+        <input type="checkbox" id="focus-toggle">
         <span class="slider"></span>
     </label>
     <input type="file" id="file-input" accept=".txt,.md" style="display:none;">

@@ -1,4 +1,5 @@
 // Focus Mode module that handles the highlighting of the current line in the editor
+import storage from './storage.js';
 
 const focusMode = {
     editor: null,
@@ -72,6 +73,7 @@ const focusMode = {
 
     toggleFocusMode(event) {
         this.isFocusMode = event.target.checked;
+        storage.saveSettings('focusEnabled', this.isFocusMode.toString());
         
         if (this.isFocusMode) {
             // Update dimensions before applying mask

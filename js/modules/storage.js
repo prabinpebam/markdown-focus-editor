@@ -42,8 +42,9 @@ const storage = {
         const focusToggle = document.getElementById('focus-toggle');
         if (focusToggle && focusEnabled !== null) {
             focusToggle.checked = (focusEnabled === 'true');
+            // Dispatch change event so focusMode module applies the restored state
+            focusToggle.dispatchEvent(new Event('change'));
             console.log(`[Storage] Set focus toggle: ${focusEnabled}`);
-            // The focusMode module will handle applying the focus effect after initialization
         }
 
         // Check if there's a current document ID

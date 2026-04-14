@@ -335,10 +335,37 @@ body.fullscreen.has-title-bar #toolbar {
     width: 10px;
     height: 10px;
     background-color: red;
+    border: 5px solid red;
+    box-sizing: border-box;
     border-radius: 50%;
     opacity: 1;
     transition: width 0.2s ease-in-out, height 0.2s ease-in-out, opacity 0.3s ease-in-out 0.1s, transform 0.3s ease-in-out 0.1s;
     pointer-events: none; 
+}
+
+/* Save progress ring (hidden by default) */
+.save-progress-ring {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    width: calc(100% + 10px);
+    height: calc(100% + 10px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.save-progress-track {
+    stroke: transparent;
+}
+
+.save-progress-bar {
+    stroke: #2196F3;
+    transition: stroke-dashoffset 0.4s ease-out, stroke 0.2s ease;
+}
+
+.save-checkmark {
+    stroke: transparent;
+    opacity: 0;
 }
 
 /* Hover effect on #toolbar when it's in its dot state */

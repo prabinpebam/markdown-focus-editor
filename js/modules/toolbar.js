@@ -137,7 +137,7 @@ const toolbar = {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 console.log('[Toolbar] Ctrl+S pressed');
-                this.handleSave();
+                this.handleSave(true);
                 return;
             }
             
@@ -176,8 +176,8 @@ const toolbar = {
         });
     },
 
-    handleSave() {
-        console.log('[Toolbar] Save button clicked.');
+    handleSave(showIndicator = false) {
+        console.log('[Toolbar] Save triggered.');
         const currentDocId = localStorage.getItem('currentDocId');
         const content = this.editorEl ? this.editorEl.innerHTML : '';
 
@@ -187,13 +187,13 @@ const toolbar = {
                 documentStore.updateDocument(currentDocId, { content: content });
                 // Download as .md file
                 this.downloadAsMarkdown(currentDoc.name || 'Untitled');
-                this.showSaveNotification(`Document "${currentDoc.name}" saved.`);
             } else {
                 this.promptAndSaveNewDocument(content);
             }
         } else {
             this.promptAndSaveNewDocument(content);
         }
+        if (showIndicator) this.playSaveAnimation();
     },
 
     /**
@@ -236,7 +236,6 @@ const toolbar = {
                 editor.undoManager.recordInitialState();
             }, 50);
         }
-        this.showSaveNotification(`Document "${newDoc.name}" saved.`);
     },
 
     createNewDocument() {
@@ -308,28 +307,82 @@ const toolbar = {
         }
     },
 
-    showSaveNotification(message) {
-        const notification = document.createElement('div');
-        notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4CAF50;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 4px;
-            z-index: 1000;
-            font-size: 14px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        `;
-        document.body.appendChild(notification);
-        
+    playSaveAnimation() {
+        if (this._saveAnimating) return;
+        this._saveAnimating = true;
+
+        const dot = this.toolbarActivatorDot;
+        if (!dot) { this._saveAnimating = false; return; }
+
+        const ring = dot.querySelector('.save-progress-ring');
+        const bar = dot.querySelector('.save-progress-bar');
+        const checkmark = dot.querySelector('.save-checkmark');
+        if (!ring || !bar || !checkmark) { this._saveAnimating = false; return; }
+
+        // Determine contrast color based on theme
+        const isDark = document.body.classList.contains('dark-theme');
+        const contrastColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+
+        const circumference = 97.4; // 2 * π * 15.5
+
+        // Phase 1 (0–200ms): Remove fill, expand dot to hover size, border color transitions
+        dot.style.transition = 'width 0.2s ease-out, height 0.2s ease-out, background-color 0.15s ease, border-color 0.2s ease';
+        dot.style.backgroundColor = 'transparent';
+        dot.style.borderColor = 'red';
+        // Small delay to let fill removal register, then expand
+        requestAnimationFrame(() => {
+            dot.style.width = '30px';
+            dot.style.height = '30px';
+            dot.style.borderColor = contrastColor;
+        });
+
+        // Phase 2 (200ms): Show progress ring and animate it
         setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 3000);
+            ring.style.opacity = '1';
+            bar.style.stroke = '#2196F3';
+            bar.style.transition = 'stroke-dashoffset 0.4s ease-out';
+            bar.setAttribute('stroke-dashoffset', '0');
+        }, 200);
+
+        // Phase 3 (600ms): Progress complete → turn green, show checkmark
+        setTimeout(() => {
+            bar.style.transition = 'stroke 0.15s ease';
+            bar.style.stroke = '#4CAF50';
+            dot.style.backgroundColor = 'rgba(76,175,80,0.15)';
+            checkmark.style.stroke = '#4CAF50';
+            checkmark.style.opacity = '1';
+        }, 600);
+
+        // Phase 4 (1000ms): Hold complete state visible
+
+        // Phase 5 (1500ms): Animate back to resting state
+        setTimeout(() => {
+            // Reset checkmark and ring
+            checkmark.style.opacity = '0';
+            checkmark.style.stroke = 'transparent';
+            ring.style.opacity = '0';
+
+            // Shrink dot back to resting state
+            dot.style.transition = 'width 0.25s ease-in, height 0.25s ease-in, background-color 0.25s ease, border-color 0.25s ease';
+            dot.style.width = '10px';
+            dot.style.height = '10px';
+            dot.style.backgroundColor = 'red';
+            dot.style.borderColor = 'red';
+
+            // Reset SVG state after transition completes
+            setTimeout(() => {
+                bar.style.transition = 'none';
+                bar.setAttribute('stroke-dashoffset', circumference.toString());
+                bar.style.stroke = '#2196F3';
+                // Clear all inline styles so CSS hover rules work again
+                dot.style.transition = '';
+                dot.style.width = '';
+                dot.style.height = '';
+                dot.style.backgroundColor = '';
+                dot.style.borderColor = '';
+                this._saveAnimating = false;
+            }, 300);
+        }, 1500);
     }
 };
 

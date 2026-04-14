@@ -6,6 +6,7 @@
 
 import editor from './editor.js';
 import markdownConverter from './markdownConverter.js';
+import toolbar from './toolbar.js';
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
@@ -97,9 +98,9 @@ const electronBridge = {
       console.log(`[ElectronBridge] File opened: ${data.name}`);
     });
 
-    // File saved confirmation
+    // File saved confirmation — handled by toolbar dot animation, no toast needed
     api.on('file-saved', (data) => {
-      this._showSaveToast(`Saved ${data.name}`);
+      console.log(`[ElectronBridge] File saved: ${data.name}`);
     });
 
     // File error notification
@@ -292,6 +293,7 @@ const electronBridge = {
       const saved = await api.invoke('file:save', filePath, content);
       if (saved) {
         api.send('title-bar-unsaved', false);
+        toolbar.playSaveAnimation();
       }
     }
   },
