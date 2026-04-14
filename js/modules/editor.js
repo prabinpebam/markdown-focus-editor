@@ -117,6 +117,21 @@ const editor = {
                 tableManager.handleClick(e, tableBlock);
             }
         });
+
+        // Click on wrapper (outside editor content) focuses editor at end
+        const wrapper = document.querySelector('.editor-wrapper');
+        if (wrapper) {
+            wrapper.addEventListener('click', (e) => {
+                // Only handle clicks directly on the wrapper, not bubbled from editor/toolbar
+                if (e.target === wrapper || e.target === this.editorEl) return;
+                if (this.editorEl.contains(e.target)) return;
+                this.editorEl.focus();
+                // Place caret at the end of the editor
+                const sel = window.getSelection();
+                sel.selectAllChildren(this.editorEl);
+                sel.collapseToEnd();
+            });
+        }
     },
 
     handleKeyDown(e) {

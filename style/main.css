@@ -302,12 +302,14 @@ body.fullscreen.has-title-bar #toolbar {
     margin: 60px 0;
     min-height: calc(100vh - 100px);
     padding: 0 100px; /* Add horizontal padding to accommodate heading markers */
+    cursor: text;
 }
 
 /* Editor styles */
 #editor {
     margin: auto;
     max-width: 800px;
+    min-height: 100%;
     padding: 40px 20px;
     outline: none;
     white-space: pre-wrap;
@@ -320,6 +322,14 @@ body.fullscreen.has-title-bar #toolbar {
 /* Paragraph spacing */
 #editor div {
     margin-top: 1.5em;
+}
+
+#editor div:first-child {
+    margin-top: 0;
+}
+
+#editor > *:first-child {
+    margin-top: 0;
 }
 
 #editor li
