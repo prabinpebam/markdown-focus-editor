@@ -132,15 +132,14 @@ const markdownConverter = {
                 const markerType = ulMatch[2];
                 const itemContent = ulMatch[3];
                 
-                // If we're starting a new list or the indent level changed
-                if (!inList || listType !== 'ul' || listIndentLevel !== indentLevel) {
+                // If we're starting a new list or switching list type
+                if (!inList || listType !== 'ul') {
                     if (inList) {
                         processedLines.push(this._constructList(listItems, listType));
                         listItems = [];
                     }
                     inList = true;
                     listType = 'ul';
-                    listIndentLevel = indentLevel;
                 }
                 
                 listItems.push({ content: itemContent, level: indentLevel });
@@ -154,15 +153,14 @@ const markdownConverter = {
                 const marker = olMatch[2];
                 const itemContent = olMatch[3];
                 
-                // If we're starting a new list or the indent level changed
-                if (!inList || listType !== 'ol' || listIndentLevel !== indentLevel) {
+                // If we're starting a new list or switching list type
+                if (!inList || listType !== 'ol') {
                     if (inList) {
                         processedLines.push(this._constructList(listItems, listType));
                         listItems = [];
                     }
                     inList = true;
                     listType = 'ol';
-                    listIndentLevel = indentLevel;
                 }
                 
                 listItems.push({ content: itemContent, level: indentLevel });
@@ -641,7 +639,9 @@ const markdownConverter = {
                 let itemContent = '';
                 for (const child of li.childNodes) {
                     if (child.nodeType === Node.TEXT_NODE) {
-                        itemContent += child.textContent;
+                        // Skip whitespace-only text nodes (from formatted HTML)
+                        const text = child.textContent.replace(/\n\s*/g, ' ').trim();
+                        if (text) itemContent += text;
                     } else if (child.nodeType === Node.ELEMENT_NODE) {
                         const childTag = child.nodeName.toLowerCase();
                         if (childTag === 'ul' || childTag === 'ol') {
