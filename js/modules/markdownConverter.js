@@ -177,8 +177,8 @@ const markdownConverter = {
                 continue;
             }
             
-            // If this line is not a list item but we're in a list, close the list
-            if (inList && line.trim() !== '') {
+            // If we reach here and we're in a list, this line is not a list item — close the list
+            if (inList) {
                 processedLines.push(this._constructList(listItems, listType));
                 inList = false;
                 listItems = [];
@@ -568,10 +568,16 @@ const markdownConverter = {
                     const level = parseInt(tagName.slice(1));
                     const markerSpan = node.querySelector('.heading-marker');
                     
-                    // Get the text content excluding the heading marker span
-                    let headingText = node.textContent;
-                    if (markerSpan) {
-                        headingText = headingText.replace(markerSpan.textContent, '');
+                    // Process heading content with inline formatting preserved
+                    let headingText = '';
+                    for (const child of node.childNodes) {
+                        // Skip the marker span
+                        if (child === markerSpan) continue;
+                        if (child.nodeType === Node.TEXT_NODE) {
+                            headingText += child.textContent;
+                        } else if (child.nodeType === Node.ELEMENT_NODE) {
+                            headingText += this._processEditorInlineContent(child);
+                        }
                     }
                     
                     // Remove zero-width space
@@ -623,12 +629,18 @@ const markdownConverter = {
             }
         }
         
-        // Build markdown: skip empty blocks entirely.
-        // join('\n\n') between content blocks provides the paragraph separator,
-        // which maps to exactly one <div><br></div> on re-open.
+        // Build markdown: content blocks separated by \n.
+        // Empty blocks (<div><br></div>) produce a blank line (\n\n separator).
+        // This preserves the original document spacing:
+        //   - Adjacent blocks with no empty div → single newline (no blank line)
+        //   - Adjacent blocks with empty div → double newline (blank line)
         const lines = [];
         for (let i = 0; i < blocks.length; i++) {
-            if (!blocks[i].isEmpty) {
+            if (blocks[i].isEmpty) {
+                // Empty div = blank line separator. Add an empty string that becomes
+                // a blank line when joined with \n on both sides.
+                lines.push('');
+            } else {
                 lines.push(blocks[i].text);
             }
         }
@@ -636,7 +648,7 @@ const markdownConverter = {
         while (lines.length > 0 && lines[lines.length - 1] === '') {
             lines.pop();
         }
-        return lines.join('\n\n');
+        return lines.join('\n');
     },
     
     /**
